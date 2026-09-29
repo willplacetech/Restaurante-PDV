@@ -245,10 +245,10 @@ export default function Layout() {
             ========================================== */}
       <aside id="sidebar-desktop">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 }}>
-          <img src="/Abraco1.png" alt="Sabor de Abraço" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
+          <img src="/Abraco1.png" alt="Restaurante" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
           <div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 17, color: 'var(--brand-brown)' }}>Sabor de Abraço</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Cafeteria e confeitaria</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 17, color: 'var(--brand-brown)' }}>Restaurante</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sistema de PDV</div>
           </div>
         </div>
 
@@ -303,10 +303,10 @@ export default function Layout() {
           <div className="mobile-menu-panel" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-menu-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img src="/Abraco1.png" alt="Sabor de Abraço" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
+                <img src="/Abraco1.png" alt="Restaurante" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
                 <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 15, color: 'var(--brand-brown)' }}>Sabor de Abraço</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Cafeteria e confeitaria</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 15, color: 'var(--brand-brown)' }}>Restaurante</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sistema de PDV</div>
                 </div>
               </div>
               <button

@@ -51,7 +51,7 @@ export function buildNotaVendaHtml(pedido, { comandaNumero, titulo = 'NOTA DE VE
       .rodape { margin-top:14px; font-size:11px; line-height:1.5; }
       @media print { @page { margin:0; size:80mm auto; } body { margin:4mm; } }
     </style></head><body>
-    <div class="center"><img class="logo" src="${logoUrl()}" alt="Sabor de Abraço"><div class="marca">SABOR DE ABRACO</div></div>
+    <div class="center"><img class="logo" src="${logoUrl()}" alt="Restaurante"><div class="marca">RESTAURANTE</div></div>
     <div class="center subtitulo">${titulo}</div>
     <div class="separador"></div>
     <div class="dados">
@@ -74,7 +74,7 @@ export function buildNotaVendaHtml(pedido, { comandaNumero, titulo = 'NOTA DE VE
       ${pago > 0 && falta > 0 ? `<div class="linha pendencia"><span>FALTA:</span><span>R$ ${dinheiro(falta)}</span></div>` : ''}
     </div>
     <div class="separador"></div>
-    <div class="center bold rodape">Sabor de Abraço<br>Agradece a Preferência!<br>Volte sempre!</div>
+    <div class="center bold rodape">Restaurante<br>Agradece a Preferência!<br>Volte sempre!</div>
     <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}</script>
     </body></html>`;
 }
@@ -142,5 +142,5 @@ function buildNotaVendaTextoBase(pedido, { comandaNumero, titulo = 'NOTA DE VEND
   }).join('\n');
   const pagamentos = (pedido.pagamentos || []).map((pagamento) => `- ${linha(pagamentoLabels[pagamento.tipo] || pagamento.tipo, `R$ ${dinheiro(pagamento.valorRecebido)}`)}`).join('\n');
 
-  return `*SABOR DE ABRAÇO*\n${titulo}\n--------------------------------\n${linha('Pedido:', `#${pedido.numero}`)}${comandaNumero ? `\n${linha('Comanda:', `#${comandaNumero}`)}` : ''}\n${linha('Data:', new Date(pedido.createdAt || Date.now()).toLocaleString('pt-BR'))}\n${linha('Cliente:', pedido.clienteNome || 'Cliente não identificado')}${pedido.atendente ? `\n${linha('Atendente:', pedido.atendente)}` : ''}\n--------------------------------\n*ITENS DO PEDIDO*\n${itens}\n--------------------------------\n${linha('Subtotal:', `R$ ${dinheiro(pedido.subtotal || pedido.total)}`)}${Number(pedido.desconto) > 0 ? `\n${linha('Desconto:', `-R$ ${dinheiro(pedido.desconto)}`)}` : ''}${utilizacaoInterna ? `\n${linha('Uso interno:', 'SIM')}` : ''}\n*${linha('TOTAL:', `R$ ${dinheiro(pedido.total)}`)}*${pagamentos ? `\n--------------------------------\n*PAGAMENTOS*\n${pagamentos}` : ''}${pago > 0 && falta > 0 ? `\n${linha('FALTA:', `R$ ${dinheiro(falta)}`)}` : ''}\n--------------------------------\n*Sabor de Abraço*\nAgradece a Preferência!\nVolte sempre!`;
+  return `*RESTAURANTE*\n${titulo}\n--------------------------------\n${linha('Pedido:', `#${pedido.numero}`)}${comandaNumero ? `\n${linha('Comanda:', `#${comandaNumero}`)}` : ''}\n${linha('Data:', new Date(pedido.createdAt || Date.now()).toLocaleString('pt-BR'))}\n${linha('Cliente:', pedido.clienteNome || 'Cliente não identificado')}${pedido.atendente ? `\n${linha('Atendente:', pedido.atendente)}` : ''}\n--------------------------------\n*ITENS DO PEDIDO*\n${itens}\n--------------------------------\n${linha('Subtotal:', `R$ ${dinheiro(pedido.subtotal || pedido.total)}`)}${Number(pedido.desconto) > 0 ? `\n${linha('Desconto:', `-R$ ${dinheiro(pedido.desconto)}`)}` : ''}${utilizacaoInterna ? `\n${linha('Uso interno:', 'SIM')}` : ''}\n*${linha('TOTAL:', `R$ ${dinheiro(pedido.total)}`)}*${pagamentos ? `\n--------------------------------\n*PAGAMENTOS*\n${pagamentos}` : ''}${pago > 0 && falta > 0 ? `\n${linha('FALTA:', `R$ ${dinheiro(falta)}`)}` : ''}\n--------------------------------\n*Restaurante*\nAgradece a Preferência!\nVolte sempre!`;
 }
