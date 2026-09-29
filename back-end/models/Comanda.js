@@ -1,0 +1,86 @@
+const mongoose = require('mongoose');
+const { UNIDADES_PERMITIDAS, normalizarUnidade } = require('../utils/unidades');
+
+const itemSchema = new mongoose.Schema({
+  produtoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  codigo: String,
+  nome: { type: String, required: true },
+  precoUnitario: { type: Number, required: true, min: 0 },
+  precoUnitarioOriginal: { type: Number, min: 0 },
+  descontoQuantidade: { type: Number, min: 0, default: 0 },
+  economiaQuantidade: { type: Number, min: 0, default: 0 },
+  faixaDescontoQuantidade: { type: Number, min: 1 },
+  grupoDescontoAtivo: { type: Boolean, default: false },
+  totalGrupo: { type: Number, min: 0 },
+  faltamParaGrupo: { type: Number, min: 0 },
+  quantidade: { type: Number, required: true, min: 0.000001 },
+  unidadeVenda: { type: String, enum: UNIDADES_PERMITIDAS, default: 'un', set: normalizarUnidade },
+  pesoPorUnidade: { type: Number, min: 0 },
+  unidadePeso: { type: String, enum: ['kg'] },
+  tipoVenda: { type: String, enum: ['inteiro', 'peso', 'unidade'], default: 'unidade' },
+  pesoVendidoKg: { type: Number, min: 0 },
+  quantidadePecas: { type: Number, min: 0 },
+  modificadores: { type: [String], default: [] },
+  aFazer: { type: Boolean, default: false },
+  insumosConsumidos: [{
+    produtoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+    quantidade: { type: Number, min: 0.000001 },
+    unidade: { type: String, enum: UNIDADES_PERMITIDAS, set: normalizarUnidade },
+  }],
+}, { _id: true });
+
+const comandaSchema = new mongoose.Schema({
+  numero: { type: String, unique: true },
+  clienteNome: { type: String, trim: true, default: 'Cliente nao identificado' },
+  clienteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+  observacao: { type: String, trim: true },
+  tipoAtendimento: { type: String, enum: ['mesa', 'balcao'], default: 'mesa', index: true },
+  statusBalcao: { type: String, enum: ['aguardando', 'preparando', 'pronto', 'pago', 'entregue'], default: 'aguardando' },
+  mesa: { type: String, trim: true },
+  itens: { type: [itemSchema], default: [] },
+  desconto: { type: Number, default: 0, min: 0 },
+  valorTotal: { type: Number, default: 0, min: 0 },
+  valorPago: { type: Number, default: 0, min: 0 },
+  saldoDevedor: { type: Number, default: 0, min: 0 },
+  statusPagamento: { type: String, enum: ['pendente', 'parcial', 'quitado', 'cancelado'], default: 'pendente' },
+  historicoPagamentos: [{
+    valor: { type: Number, required: true, min: 0 },
+    formaPagamento: { type: String, enum: ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'credito_loja', 'fiado'], default: 'dinheiro' },
+    data: { type: Date, default: Date.now },
+    usuario: String,
+  }],
+  utilizacaoInterna: { type: Boolean, default: false },
+  estoqueBaixado: { type: Boolean, default: false },
+  status: { type: String, enum: ['aberta', 'fechada', 'cancelada'], default: 'aberta', index: true },
+  atendente: { type: String, required: true },
+  pedidoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+}, { timestamps: true });
+
+comandaSchema.pre('save', async function(next) {
+  if (!this.numero) {
+    const ultima = await this.constructor.findOne({}, {}, { sort: { numero: -1 } });
+    this.numero = String(ultima ? Number(ultima.numero) + 1 : 1).padStart(4, '0');
+  }
+
+  const valorTotal = Number(this.valorTotal || 0);
+  const historicoPagamentos = Array.isArray(this.historicoPagamentos) ? this.historicoPagamentos : [];
+  const valorPago = historicoPagamentos.reduce((soma, pagamento) => soma + Number(pagamento?.valor || 0), 0);
+  this.valorPago = valorPago;
+  this.saldoDevedor = Math.max(0, valorTotal - valorPago);
+
+  if (this.status === 'cancelada') {
+    this.statusPagamento = 'cancelado';
+  } else if (valorTotal <= 0) {
+    this.statusPagamento = 'quitado';
+  } else if (valorPago <= 0) {
+    this.statusPagamento = 'pendente';
+  } else if (valorPago >= valorTotal) {
+    this.statusPagamento = 'quitado';
+  } else {
+    this.statusPagamento = 'parcial';
+  }
+
+  next();
+});
+
+module.exports = mongoose.model('Comanda', comandaSchema);
