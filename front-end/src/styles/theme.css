@@ -607,10 +607,9 @@ textarea {
 
 select {
   padding-right: 32px;
-  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-secondary-aa) 50%),
-    linear-gradient(135deg, var(--color-text-secondary-aa) 50%, transparent 50%);
-  background-position: calc(100% - 16px) calc(50% + 2px), calc(100% - 11px) calc(50% + 2px);
-  background-size: 5px 5px, 5px 5px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%238a7a6b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-size: 12px 12px;
   background-repeat: no-repeat;
   cursor: pointer;
 }

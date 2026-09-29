@@ -5,12 +5,14 @@ import { useToast } from '../components/Toast.jsx';
 
 // Imagens de ambiente da cafeteria. Se nao existirem no servidor, o painel
 // mantem o fundo terracota e o degrade continua funcionando.
-const imagensAmbiente = ['/Imagem1.webp', '/imagem2.webp', '/Imagem3.jpg'];
+const imagensAmbiente = ['/Imagem1.webp', '/imagem4.jpeg', '/Imagem3.jpg'];
+
+const FORMULARIO_VAZIO = { username: '', password: '' };
 
 export default function Login() {
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState(FORMULARIO_VAZIO);
   const [imagemAtiva, setImagemAtiva] = useState(0);
-  const [imagensOk, setImagensOk] = useState([true, true, true]);
+  const [imagensOk, setImagensOk] = useState(() => imagensAmbiente.map(() => true));
   const [logoOk, setLogoOk] = useState(true);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
@@ -20,7 +22,14 @@ export default function Login() {
   const { showToast } = useToast();
   const erroRef = useRef(null);
 
-  const ambiente = imagensAmbiente.filter((_, indice) => imagensOk[indice]);
+  // Guarda o indice original de cada imagem para que o onError marque a entrada certa.
+  const ambiente = imagensAmbiente
+    .map((src, indice) => ({ src, indice }))
+    .filter(({ indice }) => imagensOk[indice]);
+
+  const marcarImagemInvalida = (indice) => {
+    setImagensOk((atuais) => atuais.map((ok, i) => (i === indice ? false : ok)));
+  };
 
   useEffect(() => {
     if (ambiente.length < 2) return undefined;
@@ -93,31 +102,31 @@ export default function Login() {
     <div className="login-shell">
       <div className="login-layout">
         <section className="login-brand-panel" aria-hidden="true">
-          {ambiente.map((imagem, indice) => (
+          {ambiente.map(({ src, indice }, posicao) => (
             <img
-              key={imagem}
+              key={src}
               className="login-brand-panel__img"
-              src={imagem}
+              src={src}
               alt=""
-              data-active={imagemAtiva === indice ? 'true' : 'false'}
-              onError={() => setImagensOk((atuais) => atuais.map((ok, i) => (ambiente[i] === imagem ? false : ok)))}
+              data-active={imagemAtiva === posicao ? 'true' : 'false'}
+              onError={() => marcarImagemInvalida(indice)}
             />
           ))}
           <div className="login-brand-panel__overlay" />
           <div className="login-brand-panel__content">
-            <span className="login-brand-panel__eyebrow">CAFÉS ESPECIAIS · CONFEITARIA AFETIVA</span>
-            <h2 className="login-brand-panel__title">Um abraço em cada pausa.</h2>
-            <p className="login-brand-panel__text">Atenda com calma. A casa começa no primeiro carinho.</p>
+            <span className="login-brand-panel__eyebrow">Restaurante e Pousada</span>
+            <h2 className="login-brand-panel__title">Aconchego tem endereço</h2>
+            <p className="login-brand-panel__text">Desacelere. Aprecie a vida.</p>
             {ambiente.length > 1 && (
               <div className="login-brand-panel__dots">
-                {ambiente.map((imagem, indice) => (
+                {ambiente.map(({ src }, posicao) => (
                   <button
-                    key={imagem}
+                    key={src}
                     type="button"
                     className="login-dot"
-                    data-active={imagemAtiva === indice ? 'true' : 'false'}
-                    onClick={() => setImagemAtiva(indice)}
-                    aria-label={`Ver imagem ${indice + 1}`}
+                    data-active={imagemAtiva === posicao ? 'true' : 'false'}
+                    onClick={() => setImagemAtiva(posicao)}
+                    aria-label={`Ver imagem ${posicao + 1}`}
                   />
                 ))}
               </div>
