@@ -93,7 +93,7 @@ export default function Login() {
     <div className="login-shell">
       <div className="login-layout">
         <section className="login-brand-panel" aria-hidden="true">
-          {ambiente.map((imagem, indice) => (
+          {/* {ambiente.map((imagem, indice) => ( */}
             <img
               key={imagem}
               className="login-brand-panel__img"
@@ -102,9 +102,9 @@ export default function Login() {
               data-active={imagemAtiva === indice ? 'true' : 'false'}
               onError={() => setImagensOk((atuais) => atuais.map((ok, i) => (ambiente[i] === imagem ? false : ok)))}
             />
-          ))}
-          <div className="login-brand-panel__overlay" />
-          <div className="login-brand-panel__content">
+          {/* ))} */}
+          {/* <div className="login-brand-panel__overlay" /> */}
+          {/* <div className="login-brand-panel__content"> */}
             <span className="login-brand-panel__eyebrow">CAFÉS ESPECIAIS · CONFEITARIA AFETIVA</span>
             <h2 className="login-brand-panel__title">Um abraço em cada pausa.</h2>
             <p className="login-brand-panel__text">Atenda com calma. A casa começa no primeiro carinho.</p>
@@ -122,7 +122,7 @@ export default function Login() {
                 ))}
               </div>
             )}
-          </div>
+          {/* </div> */}
         </section>
 
         <section className="login-card">
@@ -132,11 +132,11 @@ export default function Login() {
             ) : (
               <span className="login-logo login-logo--fallback" aria-hidden="true">S</span>
             )}
-            <h1 className="login-title">Sabor de Abraço</h1>
-            <p className="login-subtitle">Cafés especiais · confeitaria afetiva</p>
+            <h1 className="login-title">Recanto da Siriema</h1>
+            <p className="login-subtitle">Restaurante a La'Carte</p>
           </header>
 
-          <p className="login-highlight">O cookie recheado é o abraço da casa</p>
+          {/* <p className="login-highlight">O cookie recheado é o abraço da casa</p> */}
 
           <div
             ref={erroRef}
