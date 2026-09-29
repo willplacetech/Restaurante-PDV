@@ -6,71 +6,71 @@ import { ThemeContext } from '../context/ThemeContext.jsx';
 const gruposMenu = [
   {
     chave: 'atendimento',
-    label: '🏪 ATENDIMENTO',
+    label: 'ATENDIMENTO',
     items: [
-      { label: 'Novo Pedido', icon: '🛒', to: '/pdv' },
-      { label: 'Mesas / Comandas', icon: '🪑', to: '/atendimento/mesas' },
-      { label: 'A Receber', icon: '💰', to: '/contas-receber', admin: true },
+      { label: 'Novo Pedido', to: '/pdv' },
+      { label: 'Mesas / Comandas', to: '/atendimento/mesas' },
+      { label: 'A Receber', to: '/contas-receber', admin: true },
     ],
   },
   {
     chave: 'cadastro',
-    label: '📦 CADASTRO',
+    label: 'CADASTRO',
     items: [
-      { label: 'Produtos', icon: '📦', to: '/produtos', admin: true },
-      { label: 'Mesas', icon: '🪑', to: '/cadastro/mesas', admin: true },
+      { label: 'Produtos', to: '/produtos', admin: true },
+      { label: 'Mesas', to: '/cadastro/mesas', admin: true },
     ],
   },
   {
     chave: 'compras',
-    label: '🧾 COMPRAS',
+    label: 'COMPRAS',
     items: [
-      { label: 'Lançar Entrada', icon: '🧾', to: '/compras', admin: true },
-      { label: 'Histórico de Compras', icon: '📚', to: '/compras', admin: true },
+      { label: 'Lançar Entrada', to: '/compras', admin: true },
+      { label: 'Histórico de Compras', to: '/compras', admin: true },
     ],
   },
   {
     chave: 'producao',
-    label: '🧪 PRODUÇÃO',
+    label: 'PRODUÇÃO',
     items: [
-      { label: 'Estoque de Insumos', icon: '📦', to: '/producao', admin: true },
-      { label: 'Lançar Produção', icon: '🔄', to: '/producao', admin: true },
-      { label: 'Histórico de Movimentação', icon: '📜', to: '/producao', admin: true },
-      { label: 'Cozinha', icon: '🍳', to: '/cozinha', roles: ['admin', 'operador', 'cozinha'] },
+      { label: 'Estoque de Insumos', to: '/producao', admin: true },
+      { label: 'Lançar Produção', to: '/producao', admin: true },
+      { label: 'Histórico de Movimentação', to: '/producao', admin: true },
+      { label: 'Cozinha', to: '/cozinha', roles: ['admin', 'operador', 'cozinha'] },
     ],
   },
   {
     chave: 'financeiro',
-    label: '💰 FINANCEIRO',
+    label: 'FINANCEIRO',
     items: [
-      { label: 'Fechamento de Caixa', icon: '💵', to: '/caixa', admin: true },
-      { label: 'Dashboard', icon: '📊', to: '/financeiro', admin: true },
-      { label: 'DRE / Demonstrativo', icon: '📈', to: '/financeiro', admin: true },
+      { label: 'Fechamento de Caixa', to: '/caixa', admin: true },
+      { label: 'Dashboard', to: '/financeiro', admin: true },
+      { label: 'DRE / Demonstrativo', to: '/financeiro', admin: true },
     ],
   },
   {
     chave: 'pessoas',
-    label: '👥 PESSOAS',
+    label: 'PESSOAS',
     items: [
-      { label: 'Clientes', icon: '👤', to: '/clientes', admin: true },
-      { label: 'Usuários', icon: '👥', to: '/usuarios', admin: true },
+      { label: 'Clientes', to: '/clientes', admin: true },
+      { label: 'Usuários', to: '/usuarios', admin: true },
     ],
   },
 ];
 
 const pageIcons = {
-  '/pdv': { icon: '🛒', title: 'Atendimento' },
-  '/produtos': { icon: '📦', title: 'Produtos' },
-  '/clientes': { icon: '👤', title: 'Clientes' },
-  '/comandas': { icon: '📋', title: 'Comandas' },
-  '/cozinha': { icon: '🍳', title: 'Cozinha' },
-  '/contas-receber': { icon: '💰', title: 'A Receber' },
-  '/usuarios': { icon: '👥', title: 'Usuários' },
-  '/dashboard': { icon: '📊', title: 'Dashboard' },
-  '/producao/fichas': { icon: '📋', title: 'Ficha técnica' },
-  '/producao': { icon: '🧪', title: 'Produção' },
-  '/compras': { icon: '🧾', title: 'Compras' },
-  '/financeiro': { icon: '💵', title: 'Financeiro' },
+  '/pdv': { title: 'Atendimento' },
+  '/produtos': { title: 'Produtos' },
+  '/clientes': { title: 'Clientes' },
+  '/comandas': { title: 'Comandas' },
+  '/cozinha': { title: 'Cozinha' },
+  '/contas-receber': { title: 'A Receber' },
+  '/usuarios': { title: 'Usuários' },
+  '/dashboard': { title: 'Dashboard' },
+  '/producao/fichas': { title: 'Ficha técnica' },
+  '/producao': { title: 'Produção' },
+  '/compras': { title: 'Compras' },
+  '/financeiro': { title: 'Financeiro' },
 };
 
 export default function Layout() {
@@ -110,7 +110,6 @@ export default function Layout() {
   };
 
   const pageInfo = Object.entries(pageIcons).find(([path]) => pathAtivo.startsWith(path));
-  const iconePagina = pageInfo ? pageInfo[1].icon : '';
   const tituloPagina = pageInfo ? pageInfo[1].title : 'Atendimento';
 
   const visibleGroups = () => {
@@ -161,7 +160,6 @@ export default function Layout() {
                   toggleGrupo(grupo.chave);
                 }}
               >
-                <span className="nav-link-icon">{item.icon}</span>
                 <span className="nav-link-text">{item.label}</span>
               </Link>
             ))}
@@ -190,7 +188,6 @@ export default function Layout() {
           >
             &#9776;
           </button>
-          <span style={{ fontSize: 22, lineHeight: 1 }}>{iconePagina}</span>
           <h1 style={{
             fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-primary)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
@@ -245,10 +242,9 @@ export default function Layout() {
             ========================================== */}
       <aside id="sidebar-desktop">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 }}>
-          <img src="/Abraco1.png" alt="Restaurante" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
           <div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 17, color: 'var(--brand-brown)' }}>Restaurante</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sistema de PDV</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 17, color: 'var(--text-primary)' }}>Sistema PDV</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caixa Eletrônico</div>
           </div>
         </div>
 
@@ -303,10 +299,9 @@ export default function Layout() {
           <div className="mobile-menu-panel" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-menu-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img src="/Abraco1.png" alt="Restaurante" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--brand-gold)' }} />
                 <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 15, color: 'var(--brand-brown)' }}>Restaurante</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sistema de PDV</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Sistema PDV</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caixa Eletrônico</div>
                 </div>
               </div>
               <button
@@ -493,39 +488,145 @@ export default function Layout() {
         .nav-group-container { margin-bottom: 4px; }
         .nav-group-header {
           width: 100%; padding: 10px 12px; background: transparent;
-          border: none; color: var(--text-secondary); font-weight: 700;
-          fontSize: 12px; letterSpacing: 0.08em; textTransform: uppercase;
-          cursor: pointer; display: flex; justifyContent: space-between;
-          alignItems: center; fontFamily: inherit;
+          border: none; color: var(--text-secondary); font-weight: 600;
         }
-        .nav-group-header:hover { color: 'var(--text-primary)' }
-        .nav-group-header.open { color: 'var(--text-primary)' }
-        .nav-group-arrow { fontSize: 10px; transition: transform 0.2s ease; }
-        .nav-group-content { overflow: hidden; transition: max-height 0.25s ease; max-height: 0; }
+        .nav-group-header:hover { background: var(--bg-tertiary); }
+        .nav-group-header:active { transform: scale(0.95); }
+        .nav-group-arrow { transition: transform 0.2s ease; }
+        .nav-group-header.open .nav-group-arrow { transform: rotate(180deg); }
+        .nav-group-content { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
         .nav-group-content.open { max-height: 500px; }
         .nav-link {
-          display: flex; alignItems: center; gap: 10px;
-          padding: 10px 12px 10px 28px; color: 'var(--text-secondary)';
-          textDecoration: none; fontSize: 14px; fontWeight: 500;
-          borderRadius: '8px'; margin: '2px 8px'; transition: all 0.15s ease;
+          width: 100%; padding: 10px 12px; background: transparent;
+          border: none; color: var(--text-secondary); font-weight: 500;
+          display: flex; align-items: center; justify-content: flex-start;
         }
-        .nav-link:hover { background: 'var(--bg-tertiary)'; color: 'var(--text-primary)' }
-        .nav-link.active { background: 'var(--accent-light)'; color: 'var(--accent)' }
-        .nav-link-icon { fontSize: 16px; width: 22px; textAlign: center; }
+        .nav-link:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .nav-link.active { background: var(--accent-light); color: var(--text-primary); font-weight: 600; }
+        .nav-link-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* LOGOUT */
+        /* MOBILE MENU */
+        .mobile-menu-backdrop {
+          position: fixed; inset: 0; background: rgba(0,0,0,.5);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 9999; padding: 20;
+        }
+        .mobile-menu-panel {
+          background: var(--bg-secondary); border-radius: 16; padding: 24;
+          width: 100%; maxWidth: 340; position: relative;
+        }
+        .mobile-menu-header {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 20px;
+        }
+        .mobile-menu-close {
+          background: transparent; border: none; color: var(--text-secondary);
+          font-size: 24px; cursor: pointer; width: 30px; height: 30px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .mobile-menu-nav .nav-group-container { margin-bottom: 4px; }
+        .mobile-menu-footer {
+          display: flex; flex-direction: column; gap: 10;
+          margin-top: 20px;
+        }
         .btn-logout {
-          width: 100%; padding: 10px; background: 'var(--error-bg)';
-          color: 'var(--error-text)'; border: none; borderRadius: 10px;
-          fontSize: 13px; fontWeight: 700; cursor: pointer; fontFamily: inherit;
-          minHeight: 44px; transition: all 0.2s ease;
+          width: 100%; padding: 12px; background: var(--error-bg);
+          color: var(--error-text); border: none; border-radius: 10;
+          fontSize: 14; fontWeight: 700; cursor: pointer;
+          fontFamily: inherit; minHeight: 44;
+          transition: all 0.2s ease;
         }
-        .btn-logout:hover { opacity: 0.85; }
+        .btn-logout:hover { background: var(--error-dark); }
 
-        /* SCROLLBAR */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-color); borderRadius: 3px; }
+        /* FORM ELEMENTS */
+        input, select, textarea {
+          width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
+          border-radius: 8px; background: var(--bg-secondary);
+          color: var(--text-primary); fontFamily: inherit;
+          fontSize: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+          outline: none; border-color: var(--accent);
+          box-shadow: 0 0 0 2px rgba(169, 79, 43, 0.2);
+        }
+        button {
+          background: var(--accent); color: white; border: none;
+          borderRadius: 8px; padding: 10px 16px; fontWeight: 600;
+          cursor: pointer; fontFamily: inherit; fontSize: 14px;
+          transition: background 0.2s ease;
+        }
+        button:hover { background: var(--accent-dark); }
+        button:disabled { background: var(--bg-tertiary); color: var(--text-secondary); cursor: not-allowed; }
+        button.secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        button.secondary:hover { background: var(--bg-tertiary); opacity: 0.9; }
+        button.danger { background: var(--error-bg); color: var(--error-text); }
+        button.danger:hover { background: var(--error-dark); }
+        button.success { background: var(--success-bg); color: var(--success-text); }
+        button.success:hover { background: var(--success-dark); }
+
+        /* CARDS */
+        .card {
+          background: var(--bg-secondary); borderRadius: 12px;
+          padding: 20px; marginBottom: 20px;
+          border: 1px solid var(--border-color);
+        }
+        .card-header {
+          display: flex; justifyContent: space-between; alignItems: center;
+          marginBottom: 16px;
+        }
+        .card-title {
+          fontSize: 18px; fontWeight: 600; color: var(--text-primary);
+        }
+        .card-body { }
+
+        /* TABLES */
+        table {
+          width: 100%; borderCollapse: collapse;
+        }
+        th, td {
+          padding: 12px 16px; textAlign: left;
+          borderBottom: 1px solid var(--border-color);
+        }
+        th {
+          background: var(--bg-tertiary); fontWeight: 600;
+          color: var(--text-primary); fontSize: 14px;
+        }
+        tr:hover { background: var(--bg-tertiary); }
+
+        /* ALERTAS */
+        .alert {
+          padding: 12px 16px; borderRadius: 8px; marginBottom: 16px;
+          fontWeight: 500;
+        }
+        .alert-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+        .alert-error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
+        .alert-warning { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
+        .alert-info { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-border); }
+
+        /* UTILIDADES */
+        .text-center { textAlign: center; }
+        .text-right { textAlign: right; }
+        .text-left { textAlign: left; }
+        .mt-1 { marginTop: 4px; }
+        .mt-2 { marginTop: 8px; }
+        .mt-3 { marginTop: 12px; }
+        .mt-4 { marginTop: 16px; }
+        .mt-5 { marginTop: 20px; }
+        .mb-1 { marginBottom: 4px; }
+        .mb-2 { marginBottom: 8px; }
+        .mb-3 { marginBottom: 12px; }
+        .mb-4 { marginBottom: 16px; }
+        .mb-5 { marginBottom: 20px; }
+        .flex { display: flex; }
+        .flex-col { flexDirection: column; }
+        .items-center { alignItems: center; }
+        .justify-center { justifyContent: center; }
+        .justify-between { justifyContent: space-between; }
+        .gap-4 { gap: 16px; }
+        .w-full { width: 100%; }
+        .max-w-xs { maxWidth: 360px; }
+        .max-w-sm { maxWidth: 240px; }
+        .hidden { display: none; }
       `}</style>
     </div>
   );
