@@ -1,8 +1,8 @@
 services:
   - type: web
     runtime: node
-    name: pdv-cafe-api-willplacetech
-    branch: Compras
+    name: pdv-restaurante-api
+    branch: main
     region: oregon
     plan: free
     rootDir: back-end
@@ -13,12 +13,12 @@ services:
       - key: MONGO_URI
         sync: false
       - key: FRONTEND_URL
-        value: https://sabordabraco.onrender.com
+        value: https://pdv-restaurante-demo.onrender.com
 
   - type: web
     runtime: static
-    name: sabordabraco
-    branch: Compras
+    name: pdv-restaurante-demo
+    branch: main
     rootDir: front-end
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
@@ -28,4 +28,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://pdv-cafe-api-willplacetech.onrender.com/api
+        value: https://pdv-restaurante-api.onrender.com/api

@@ -4,7 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const colors = require('colors');
-const path = require('path'); // ← ADICIONADO
+const path = require('path');
 const connectDB = require('./db');
 const User = require('./models/User');
 
@@ -12,11 +12,6 @@ const app = express();
 
 const allowedOrigins = [
   ...(process.env.FRONTEND_URL || '').split(','),
-  'https://sabordabraco.onrender.com',
-  'https://saborabraco.onrender.com',
-  'https://pdv-cafe-web-willplacetech.onrender.com',
-  'https://pdv-mern-1.onrender.com',
-  'https://sabordabraco-95pc.onrender.com',
 ]
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
@@ -80,7 +75,7 @@ app.use('/api/produtos', require('./routes/products'));
 // Rota base da API
 app.get('/api', (req, res) => {
   res.json({ 
-    msg: 'API PDV MERN funcionando!',
+    msg: 'API PDV Restaurante funcionando!',
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
@@ -122,7 +117,7 @@ const startServer = async () => {
   await connectDB();
   const adminUsername = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
   if (!await User.exists({ username: adminUsername })) {
-    await User.create({ username: adminUsername, password: process.env.ADMIN_PASSWORD || '1234', role: 'admin' });
+    await User.create({ username: adminUsername, password: process.env.ADMIN_PASSWORD || 'admin1234', role: 'admin' });
     console.log(`Administrador inicial "${adminUsername}" criado.`.green);
   }
   app.listen(PORT, () => {
