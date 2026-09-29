@@ -33,6 +33,20 @@ beforeEach(async () => {
 });
 
 describe('API Endpoints', () => {
+  test('OPTIONS /api/auth/login → permite preflight do front-end no Render', async () => {
+    const origin = 'https://restaurante-pdv.onrender.com';
+    const res = await request(app)
+      .options('/api/auth/login')
+      .set('Origin', origin)
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'content-type,authorization');
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe(origin);
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+    expect(res.headers['access-control-allow-methods']).toContain('POST');
+  });
+
   test('POST /api/auth/login → retorna token', async () => {
     const res = await request(app)
       .post('/api/auth/login')
