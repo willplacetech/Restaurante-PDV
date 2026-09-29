@@ -90,7 +90,14 @@ export default function Caixa() {
     } catch (error) { showToast(error.response?.data?.msg || 'Não foi possível registrar o movimento', 'error'); }
   };
 
-  if (carregando || !caixa || !sistema) return <div className="caixa-page"><section className="caixa-panel">Carregando fechamento de caixa...</section></div>;
+  if (carregando || !caixa || !sistema) return <div className="caixa-page">
+    <header className="page-heading caixa-heading">
+      <div><span className="dashboard-eyebrow">CONFERÊNCIA DIÁRIA</span><h1>Fechamento de Caixa</h1><p>Compare o esperado pelo sistema com o dinheiro físico contado.</p></div>
+    </header>
+    <div className="state" role="status" aria-live="polite">
+      <span className="state__text">Carregando fechamento de caixa...</span>
+    </div>
+  </div>;
 
   return (
     <div className="caixa-page">

@@ -1,12 +1,11 @@
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext.jsx';
-import { ThemeContext } from '../context/ThemeContext.jsx';
 
 const gruposMenu = [
   {
     chave: 'atendimento',
-    label: 'ATENDIMENTO',
+    label: 'Atendimento',
     items: [
       { label: 'Novo Pedido', to: '/pdv' },
       { label: 'Mesas / Comandas', to: '/atendimento/mesas' },
@@ -15,156 +14,206 @@ const gruposMenu = [
   },
   {
     chave: 'cadastro',
-    label: 'CADASTRO',
+    label: 'Cadastro',
     items: [
       { label: 'Produtos', to: '/produtos', admin: true },
       { label: 'Mesas', to: '/cadastro/mesas', admin: true },
+      { label: 'Clientes', to: '/clientes', admin: true },
+      { label: 'Usuários', to: '/usuarios', admin: true },
     ],
   },
   {
     chave: 'compras',
-    label: 'COMPRAS',
+    label: 'Compras',
     items: [
-      { label: 'Lançar Entrada', to: '/compras', admin: true },
-      { label: 'Histórico de Compras', to: '/compras', admin: true },
+      { label: 'Compras', to: '/compras', admin: true },
     ],
   },
   {
     chave: 'producao',
-    label: 'PRODUÇÃO',
+    label: 'Produção',
     items: [
-      { label: 'Estoque de Insumos', to: '/producao', admin: true },
-      { label: 'Lançar Produção', to: '/producao', admin: true },
-      { label: 'Histórico de Movimentação', to: '/producao', admin: true },
+      { label: 'Produção', to: '/producao', admin: true },
       { label: 'Cozinha', to: '/cozinha', roles: ['admin', 'operador', 'cozinha'] },
     ],
   },
   {
     chave: 'financeiro',
-    label: 'FINANCEIRO',
+    label: 'Financeiro',
     items: [
       { label: 'Fechamento de Caixa', to: '/caixa', admin: true },
-      { label: 'Dashboard', to: '/financeiro', admin: true },
-      { label: 'DRE / Demonstrativo', to: '/financeiro', admin: true },
-    ],
-  },
-  {
-    chave: 'pessoas',
-    label: 'PESSOAS',
-    items: [
-      { label: 'Clientes', to: '/clientes', admin: true },
-      { label: 'Usuários', to: '/usuarios', admin: true },
+      { label: 'Dashboard', to: '/dashboard', admin: true },
+      { label: 'Financeiro / DRE', to: '/financeiro', admin: true },
     ],
   },
 ];
 
-const pageIcons = {
-  '/pdv': { title: 'Atendimento' },
-  '/produtos': { title: 'Produtos' },
-  '/clientes': { title: 'Clientes' },
-  '/comandas': { title: 'Comandas' },
-  '/cozinha': { title: 'Cozinha' },
-  '/contas-receber': { title: 'A Receber' },
-  '/usuarios': { title: 'Usuários' },
-  '/dashboard': { title: 'Dashboard' },
-  '/producao/fichas': { title: 'Ficha técnica' },
-  '/producao': { title: 'Produção' },
-  '/compras': { title: 'Compras' },
-  '/financeiro': { title: 'Financeiro' },
+const pageTitles = {
+  '/pdv': 'Atendimento',
+  '/produtos': 'Produtos',
+  '/clientes': 'Clientes',
+  '/usuarios': 'Usuários',
+  '/atendimento/mesas': 'Mesas / Comandas',
+  '/comandas': 'Mesas / Comandas',
+  '/cozinha': 'Cozinha',
+  '/contas-receber': 'A Receber',
+  '/dashboard': 'Dashboard',
+  '/producao': 'Produção',
+  '/producao/fichas': 'Produção',
+  '/compras': 'Compras',
+  '/financeiro': 'Financeiro',
+  '/caixa': 'Fechamento de Caixa',
+  '/cadastro/mesas': 'Mesas',
 };
+
+function ChevronIcon({ open }) {
+  return (
+    <svg
+      className="nav-chevron"
+      data-open={open ? 'true' : 'false'}
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function Layout() {
   const { user, logout } = useContext(AuthContext);
-  const { isDark, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [showConfirm, setShowConfirm] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [gruposAbertos, setGruposAbertos] = useState({ atendimento: true });
+  const drawerRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const hamburgerRef = useRef(null);
 
   const sair = () => { logout(); navigate('/login'); };
 
   const toggleGrupo = (chave) => {
-    setGruposAbertos((prev) => {
-      const novo = {};
-      Object.keys(prev).forEach((k) => { if (k !== chave) novo[k] = false; });
-      novo[chave] = !prev[chave];
-      return novo;
-    });
+    setGruposAbertos((prev) => ({ ...prev, [chave]: !prev[chave] }));
   };
 
   const pathAtivo = location.pathname;
   const grupoAtivo = gruposMenu.find((g) => g.items.some((item) => pathAtivo.startsWith(item.to)));
 
-  const toggleMobileMenu = (open) => {
-    setMobileMenuOpen(open);
-    if (open) {
-      const activeKey = grupoAtivo?.chave;
-      const novo = {};
-      gruposMenu.forEach((g) => {
-        if (g.chave === activeKey) novo[g.chave] = true;
-        else novo[g.chave] = false;
-      });
-      setGruposAbertos(novo);
+  const abrirMenuMobile = () => {
+    setMobileMenuOpen(true);
+    if (grupoAtivo) {
+      setGruposAbertos((prev) => ({ ...prev, [grupoAtivo.chave]: true }));
     }
   };
 
-  const pageInfo = Object.entries(pageIcons).find(([path]) => pathAtivo.startsWith(path));
-  const tituloPagina = pageInfo ? pageInfo[1].title : 'Atendimento';
+  const fecharMenuMobile = ({ restaurarFoco = true } = {}) => {
+    setMobileMenuOpen(false);
+    if (restaurarFoco) hamburgerRef.current?.focus();
+  };
+
+  // Mantem o grupo da rota atual sempre aberto, sem efeito colateral.
+  const grupoAberto = (chave) => Boolean(gruposAbertos[chave]) || grupoAtivo?.chave === chave;
+
+  // Drawer: trava o scroll, foca o botao de fechar e fecha com Escape.
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    const aoTeclar = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        fecharMenuMobile();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusaveis = drawerRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusaveis || focusaveis.length === 0) return;
+      const primeiro = focusaveis[0];
+      const ultimo = focusaveis[focusaveis.length - 1];
+
+      if (event.shiftKey && document.activeElement === primeiro) {
+        event.preventDefault();
+        ultimo.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primeiro.focus();
+      }
+    };
+
+    document.addEventListener('keydown', aoTeclar);
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', aoTeclar);
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, [mobileMenuOpen]);
+
+  // Fecha o modal de confirmacao com Escape.
+  useEffect(() => {
+    if (!showConfirm) return undefined;
+    const aoTeclar = (event) => {
+      if (event.key === 'Escape') setShowConfirm(false);
+    };
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [showConfirm]);
+
+  const tituloPagina = Object.entries(pageTitles).find(([path]) => pathAtivo.startsWith(path))?.[1] || 'Atendimento';
 
   const visibleGroups = () => {
     const userRole = user?.role;
-    return gruposMenu.filter((grupo) => {
-      if (grupo.chave === 'atendimento') {
-        return grupo.items.some((item) => !item.admin || userRole === 'admin');
-      }
-      if (grupo.admin) return userRole === 'admin';
-      return grupo.items.some((item) => {
-        if (item.admin) return userRole === 'admin';
-        if (item.roles) return item.roles.includes(userRole);
-        return true;
-      });
-    });
+    return gruposMenu
+      .map((grupo) => ({
+        ...grupo,
+        items: grupo.items.filter((item) => {
+          if (item.admin) return userRole === 'admin';
+          if (item.roles) return item.roles.includes(userRole);
+          return true;
+        }),
+      }))
+      .filter((grupo) => grupo.items.length > 0);
   };
 
   const renderGrupo = (grupo, isMobile) => {
-    const isOpen = gruposAbertos[grupo.chave] || grupo.sempreVisivel;
-    const userRole = user?.role;
-    const visibleItems = grupo.items.filter((item) => {
-      if (item.admin) return userRole === 'admin';
-      if (item.roles) return item.roles.includes(userRole);
-      return true;
-    });
-    if (visibleItems.length === 0) return null;
+    const isOpen = grupoAberto(grupo.chave);
+    const grupoLabelId = `nav-group-${grupo.chave}-${isMobile ? 'mobile' : 'desktop'}`;
 
     return (
-      <div className="nav-group-container" key={grupo.chave}>
+      <div className="nav-group" key={grupo.chave}>
         <button
           type="button"
-          className={'nav-group-header ' + (isOpen ? 'open' : '')}
+          className="nav-group-header"
           onClick={() => toggleGrupo(grupo.chave)}
           aria-expanded={isOpen}
+          aria-controls={grupoLabelId}
         >
           <span className="nav-group-label">{grupo.label}</span>
-          <span className="nav-group-arrow">{isOpen ? '▼' : '▶'}</span>
+          <ChevronIcon open={isOpen} />
         </button>
-        {isOpen && (
-          <div className={'nav-group-content ' + (isOpen ? 'open' : '')}>
-            {visibleItems.map((item) => (
+        <div id={grupoLabelId} className="nav-group-content" data-open={isOpen ? 'true' : 'false'} hidden={!isOpen}>
+          {grupo.items.map((item) => {
+            const isActive = pathAtivo.startsWith(item.to);
+            return (
               <Link
                 key={item.to}
                 to={item.to}
-                className={pathAtivo.startsWith(item.to) ? 'nav-link active' : 'nav-link'}
-                onClick={() => {
-                  if (isMobile) toggleMobileMenu(false);
-                  toggleGrupo(grupo.chave);
-                }}
+                className="nav-link"
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => { if (isMobile) setMobileMenuOpen(false); }}
               >
                 <span className="nav-link-text">{item.label}</span>
               </Link>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -172,462 +221,346 @@ export default function Layout() {
   const groups = visibleGroups();
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', fontFamily: 'var(--font-body)', color: 'var(--text-primary)', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Ir para o conteúdo principal</a>
 
-      {/* ==========================================
-            HEADER MOBILE
-            ========================================== */}
-      <header id="header-mobile">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-          <button
-            type="button"
-            className="hamburger"
-            onClick={() => toggleMobileMenu(true)}
-            aria-label="Abrir menu"
-            aria-expanded={mobileMenuOpen}
-          >
-            &#9776;
-          </button>
-          <h1 style={{
-            fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-          }}>{tituloPagina}</h1>
-        </div>
+      <header className="app-header">
+        <button
+          ref={hamburgerRef}
+          type="button"
+          className="hamburger"
+          onClick={abrirMenuMobile}
+          aria-label="Abrir menu de navegação"
+          aria-expanded={mobileMenuOpen}
+          aria-controls="app-drawer"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
 
-        <div style={{
-          display: 'flex', borderRadius: 10, overflow: 'hidden',
-          border: '1px solid var(--border-color)', height: 38, flexShrink: 0
-        }}>
-          <button onClick={toggleTheme} style={{
-            background: 'transparent', color: 'var(--text-primary)',
-            border: '1px solid var(--border-color)',
-            borderRight: '1px solid var(--border-color)',
-            padding: '0 10px', fontWeight: 700, fontSize: 16,
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', gap: 4,
-            transition: 'all 0.2s ease'
-          }} title={isDark ? 'Modo claro' : 'Modo escuro'}>
-            {isDark ? '☀️' : '🌙'}
-          </button>
-          <div style={{
-            background: 'var(--success-bg)', color: 'var(--success-text)',
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '0 10px', fontWeight: 700, fontSize: 13
-          }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: '50%',
-              background: 'rgba(255,255,255,.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, flexShrink: 0
-            }}>{user?.username?.[0]?.toUpperCase()}</div>
-            <span style={{ maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.username}
-            </span>
-          </div>
-          <button onClick={() => setShowConfirm(true)} style={{
-            background: 'var(--error-bg)', color: 'var(--error-text)', border: 'none',
-            borderLeft: '1px solid rgba(255,255,255,.2)',
-            padding: '0 14px', fontWeight: 700, fontSize: 13,
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', gap: 4
-          }}>
+        <h1 className="app-header__title">{tituloPagina}</h1>
+
+        <div className="app-header__actions">
+          <span className="user-chip">
+            <span className="user-chip__avatar" aria-hidden="true">{user?.username?.[0]?.toUpperCase() || '?'}</span>
+            <span className="user-chip__name truncate">{user?.username || 'Usuário'}</span>
+          </span>
+          <button type="button" className="btn-secondary btn-logout-compact" onClick={() => setShowConfirm(true)}>
             Sair
           </button>
         </div>
       </header>
 
-
-      {/* ==========================================
-            SIDEBAR DESKTOP - 260px
-            ========================================== */}
-      <aside id="sidebar-desktop">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 17, color: 'var(--text-primary)' }}>Sistema PDV</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caixa Eletrônico</div>
-          </div>
+      <aside className="app-sidebar" id="sidebar-desktop">
+        <div className="brand">
+          <span className="brand__mark" aria-hidden="true">S</span>
+          <span className="brand__text">
+            <strong className="brand__name">Sistema PDV</strong>
+            <span className="brand__tagline">Restaurante</span>
+          </span>
         </div>
 
-        <button onClick={toggleTheme} style={{
-          width: '100%', padding: '10px',
-          background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '10px', cursor: 'pointer',
-          fontWeight: '600', fontSize: '13px',
-          minHeight: '40px', fontFamily: 'inherit',
-          marginBottom: '20px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: '6px',
-          transition: 'all 0.2s ease'
-        }} title={isDark ? 'Modo claro' : 'Modo escuro'}>
-          {isDark ? '☀️ Modo Claro' : '🌙 Modo Escuro'}
-        </button>
-
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Navegação principal">
           {groups.map((grupo) => renderGrupo(grupo, false))}
         </nav>
 
-        <div style={{
-          borderTop: '1px solid var(--border-color)', paddingTop: 16, marginTop: 'auto'
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 12px', borderRadius: 10,
-            background: 'var(--accent-light)', marginBottom: 10
-          }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'var(--success-bg)', color: 'var(--success-text)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 700, fontSize: 14, flexShrink: 0
-            }}>{user?.username?.[0]?.toUpperCase()}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.username}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{user?.role}</div>
-            </div>
+        <div className="sidebar-footer">
+          <div className="user-card">
+            <span className="user-card__avatar" aria-hidden="true">{user?.username?.[0]?.toUpperCase() || '?'}</span>
+            <span className="user-card__text">
+              <strong className="truncate">{user?.username || 'Usuário'}</strong>
+              <span className="user-card__role">{user?.role || '—'}</span>
+            </span>
           </div>
-          <button onClick={() => setShowConfirm(true)} className="btn-logout">Sair</button>
+          <button type="button" className="btn-secondary" onClick={() => setShowConfirm(true)}>Sair</button>
         </div>
       </aside>
 
-
-      {/* ==========================================
-            OVERLAY MOBILE - MENU HAMBURGUER
-            ========================================== */}
       {mobileMenuOpen && (
-        <div className="mobile-menu-backdrop" onClick={() => toggleMobileMenu(false)}>
-          <div className="mobile-menu-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-menu-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Sistema PDV</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caixa Eletrônico</div>
-                </div>
+        <div className="drawer-backdrop" onClick={() => fecharMenuMobile()}>
+          <div
+            className="app-drawer"
+            id="app-drawer"
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu de navegação"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="drawer-header">
+              <div className="brand brand--drawer">
+                <span className="brand__mark" aria-hidden="true">S</span>
+                <span className="brand__text">
+                  <strong className="brand__name">Sistema PDV</strong>
+                  <span className="brand__tagline">Restaurante</span>
+                </span>
               </div>
               <button
+                ref={closeButtonRef}
                 type="button"
-                className="mobile-menu-close"
-                onClick={() => toggleMobileMenu(false)}
+                className="drawer-close"
+                onClick={fecharMenuMobile}
                 aria-label="Fechar menu"
               >
-                x
+                <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
               </button>
             </div>
 
-            <nav className="mobile-menu-nav">
+            <nav className="drawer-nav" aria-label="Navegação principal (menu)">
               {groups.map((grupo) => renderGrupo(grupo, true))}
             </nav>
 
-            <div className="mobile-menu-footer">
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 12px', borderRadius: 10,
-                background: 'var(--accent-light)', marginBottom: 10
-              }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: 'var(--success-bg)', color: 'var(--success-text)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: 14, flexShrink: 0
-                }}>{user?.username?.[0]?.toUpperCase()}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.username}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{user?.role}</div>
-                </div>
+            <div className="drawer-footer">
+              <div className="user-card">
+                <span className="user-card__avatar" aria-hidden="true">{user?.username?.[0]?.toUpperCase() || '?'}</span>
+                <span className="user-card__text">
+                  <strong className="truncate">{user?.username || 'Usuário'}</strong>
+                  <span className="user-card__role">{user?.role || '—'}</span>
+                </span>
               </div>
-              <button onClick={() => { setShowConfirm(true); toggleMobileMenu(false); }} className="btn-logout">Sair</button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => { fecharMenuMobile({ restaurarFoco: false }); setShowConfirm(true); }}
+              >
+                Sair
+              </button>
             </div>
           </div>
         </div>
       )}
 
-
-      {/* ==========================================
-            CONTEUDO PRINCIPAL
-            ========================================== */}
-      <main id="main-content">
+      <main id="main-content" className="app-main">
         <Outlet />
       </main>
 
-
-      {/* ==========================================
-            MODAL DE SAIDA
-            ========================================== */}
       {showConfirm && (
-        <div onClick={() => setShowConfirm(false)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 99999, padding: 20
-        }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: 'var(--bg-secondary)', borderRadius: 16, padding: 24,
-            width: '100%', maxWidth: 340, textAlign: 'center',
-            boxShadow: 'var(--shadow-lg)',
-            color: 'var(--text-primary)'
-          }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error-bg)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 28, margin: '0 auto 16px'
-            }}></div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 18, color: 'var(--text-primary)' }}>Deseja realmente sair?</h3>
-            <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--text-secondary)' }}>
-              Voce precisara fazer login novamente para acessar o sistema.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowConfirm(false)} style={{
-                flex: 1, padding: '12px', background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-color)', borderRadius: 10, fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
-                transition: 'all 0.2s ease'
-              }}>Cancelar</button>
-              <button onClick={sair} style={{
-                flex: 1, padding: '12px', background: 'var(--error-bg)', color: 'var(--error-text)',
-                border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
-                transition: 'all 0.2s ease'
-              }}>Sim, Sair</button>
+        <div className="modal-backdrop" onClick={() => setShowConfirm(false)}>
+          <div
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            aria-describedby="logout-desc"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" focusable="false">
+                <path d="M12 8v5M12 16.5v.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+            </div>
+            <h2 className="modal__title" id="logout-title">Deseja realmente sair?</h2>
+            <p className="modal__text" id="logout-desc">Você precisará fazer login novamente para acessar o sistema.</p>
+            <div className="modal__actions">
+              <button type="button" className="btn-secondary" onClick={() => setShowConfirm(false)}>Cancelar</button>
+              <button type="button" className="btn-danger" onClick={sair}>Sim, sair</button>
             </div>
           </div>
         </div>
       )}
 
-
-      {/* ==========================================
-            CSS GLOBAL
-            ========================================== */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
-
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { margin: 0; }
-
-        /* DESKTOP - BARRA LATERAL 260px */
-        @media (min-width: 769px) {
-          #header-mobile { display: none !important; }
-          #sidebar-desktop {
-            display: flex !important;
-            position: fixed; top: 0; left: 0;
-            width: 260px;
-            height: 100vh;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border-color);
-            padding: 24px;
-            flex-direction: column;
-            z-index: 50;
-          }
-          #main-content {
-            margin-left: 260px !important;
-            padding: 28px !important;
-          }
-        }
-
-        /* MOBILE */
-        @media (max-width: 768px) {
-          #header-mobile {
-            display: flex !important;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            position: sticky;
-            top: 0;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: calc(12px + var(--safe-top)) 16px 12px 16px;
-            z-index: 100;
-          }
-          #sidebar-desktop {
-            display: none !important;
-            position: absolute !important;
-            left: -9999px !important;
-            width: 0 !important;
-            height: 0 !important;
-            overflow: hidden !important;
-          }
-          #main-content {
-            margin-left: 0 !important;
-            padding: calc(16px + var(--safe-top)) 16px calc(80px + var(--safe-bottom)) 16px !important;
-            min-height: calc(100vh - 60px);
-          }
-        }
-
-        @media (display-mode: standalone) {
-          #header-mobile {
-            padding-top: calc(18px + var(--safe-top)) !important;
-          }
-          #main-content {
-            padding-top: calc(20px + var(--safe-top)) !important;
-          }
-        }
-
-        /* HAMBURGER BUTTON (mobile) */
-        .hamburger {
-          display: none;
-          background: transparent;
-          color: var(--text-primary);
-          border: 1px solid var(--border-color);
-          border-radius: 10px;
-          width: 44px;
-          height: 44px;
-          font-size: 22px;
-          cursor: pointer;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s ease;
-        }
-
-        @media (max-width: 768px) {
-          .hamburger { display: flex; }
-        }
-
-        .hamburger:hover { background: var(--bg-tertiary); }
-        .hamburger:active { transform: scale(0.95); }
-
-        /* NAVIGATION */
-        .nav-group-container { margin-bottom: 4px; }
-        .nav-group-header {
-          width: 100%; padding: 10px 12px; background: transparent;
-          border: none; color: var(--text-secondary); font-weight: 600;
-        }
-        .nav-group-header:hover { background: var(--bg-tertiary); }
-        .nav-group-header:active { transform: scale(0.95); }
-        .nav-group-arrow { transition: transform 0.2s ease; }
-        .nav-group-header.open .nav-group-arrow { transform: rotate(180deg); }
-        .nav-group-content { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
-        .nav-group-content.open { max-height: 500px; }
-        .nav-link {
-          width: 100%; padding: 10px 12px; background: transparent;
-          border: none; color: var(--text-secondary); font-weight: 500;
-          display: flex; align-items: center; justify-content: flex-start;
-        }
-        .nav-link:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-        .nav-link.active { background: var(--accent-light); color: var(--text-primary); font-weight: 600; }
-        .nav-link-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-        /* MOBILE MENU */
-        .mobile-menu-backdrop {
-          position: fixed; inset: 0; background: rgba(0,0,0,.5);
-          display: flex; align-items: center; justify-content: center;
-          z-index: 9999; padding: 20;
-        }
-        .mobile-menu-panel {
-          background: var(--bg-secondary); border-radius: 16; padding: 24;
-          width: 100%; maxWidth: 340; position: relative;
-        }
-        .mobile-menu-header {
-          display: flex; align-items: center; justify-content: space-between;
-          margin-bottom: 20px;
-        }
-        .mobile-menu-close {
-          background: transparent; border: none; color: var(--text-secondary);
-          font-size: 24px; cursor: pointer; width: 30px; height: 30px;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .mobile-menu-nav .nav-group-container { margin-bottom: 4px; }
-        .mobile-menu-footer {
-          display: flex; flex-direction: column; gap: 10;
-          margin-top: 20px;
-        }
-        .btn-logout {
-          width: 100%; padding: 12px; background: var(--error-bg);
-          color: var(--error-text); border: none; border-radius: 10;
-          fontSize: 14; fontWeight: 700; cursor: pointer;
-          fontFamily: inherit; minHeight: 44;
-          transition: all 0.2s ease;
-        }
-        .btn-logout:hover { background: var(--error-dark); }
-
-        /* FORM ELEMENTS */
-        input, select, textarea {
-          width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
-          border-radius: 8px; background: var(--bg-secondary);
-          color: var(--text-primary); fontFamily: inherit;
-          fontSize: 14px;
-        }
-        input:focus, select:focus, textarea:focus {
-          outline: none; border-color: var(--accent);
-          box-shadow: 0 0 0 2px rgba(169, 79, 43, 0.2);
-        }
-        button {
-          background: var(--accent); color: white; border: none;
-          borderRadius: 8px; padding: 10px 16px; fontWeight: 600;
-          cursor: pointer; fontFamily: inherit; fontSize: 14px;
-          transition: background 0.2s ease;
-        }
-        button:hover { background: var(--accent-dark); }
-        button:disabled { background: var(--bg-tertiary); color: var(--text-secondary); cursor: not-allowed; }
-        button.secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
-        button.secondary:hover { background: var(--bg-tertiary); opacity: 0.9; }
-        button.danger { background: var(--error-bg); color: var(--error-text); }
-        button.danger:hover { background: var(--error-dark); }
-        button.success { background: var(--success-bg); color: var(--success-text); }
-        button.success:hover { background: var(--success-dark); }
-
-        /* CARDS */
-        .card {
-          background: var(--bg-secondary); borderRadius: 12px;
-          padding: 20px; marginBottom: 20px;
-          border: 1px solid var(--border-color);
-        }
-        .card-header {
-          display: flex; justifyContent: space-between; alignItems: center;
-          marginBottom: 16px;
-        }
-        .card-title {
-          fontSize: 18px; fontWeight: 600; color: var(--text-primary);
-        }
-        .card-body { }
-
-        /* TABLES */
-        table {
-          width: 100%; borderCollapse: collapse;
-        }
-        th, td {
-          padding: 12px 16px; textAlign: left;
-          borderBottom: 1px solid var(--border-color);
-        }
-        th {
-          background: var(--bg-tertiary); fontWeight: 600;
-          color: var(--text-primary); fontSize: 14px;
-        }
-        tr:hover { background: var(--bg-tertiary); }
-
-        /* ALERTAS */
-        .alert {
-          padding: 12px 16px; borderRadius: 8px; marginBottom: 16px;
-          fontWeight: 500;
-        }
-        .alert-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
-        .alert-error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
-        .alert-warning { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
-        .alert-info { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-border); }
-
-        /* UTILIDADES */
-        .text-center { textAlign: center; }
-        .text-right { textAlign: right; }
-        .text-left { textAlign: left; }
-        .mt-1 { marginTop: 4px; }
-        .mt-2 { marginTop: 8px; }
-        .mt-3 { marginTop: 12px; }
-        .mt-4 { marginTop: 16px; }
-        .mt-5 { marginTop: 20px; }
-        .mb-1 { marginBottom: 4px; }
-        .mb-2 { marginBottom: 8px; }
-        .mb-3 { marginBottom: 12px; }
-        .mb-4 { marginBottom: 16px; }
-        .mb-5 { marginBottom: 20px; }
-        .flex { display: flex; }
-        .flex-col { flexDirection: column; }
-        .items-center { alignItems: center; }
-        .justify-center { justifyContent: center; }
-        .justify-between { justifyContent: space-between; }
-        .gap-4 { gap: 16px; }
-        .w-full { width: 100%; }
-        .max-w-xs { maxWidth: 360px; }
-        .max-w-sm { maxWidth: 240px; }
-        .hidden { display: none; }
-      `}</style>
+      <style>{layoutStyles}</style>
     </div>
   );
 }
+
+const layoutStyles = `
+  .app-shell { min-height: 100svh; background: var(--color-page); }
+
+  .skip-link {
+    position: absolute; left: -9999px; top: 8px; z-index: 10000;
+    padding: 8px 16px; background: var(--color-primary); color: #fff;
+    border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none;
+  }
+  .skip-link:focus { left: 8px; }
+
+  /* ---------- HEADER ---------- */
+  .app-header {
+    position: sticky; top: 0; z-index: 60;
+    display: flex; align-items: center; gap: var(--space-1);
+    min-height: 60px; padding: var(--space-1) var(--space-2);
+    background: var(--color-card); border-bottom: 1px solid var(--color-border);
+  }
+  .app-header__title {
+    flex: 1 1 auto; min-width: 0; margin: 0;
+    font-size: 20px; font-weight: 600; color: var(--color-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .app-header__actions { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
+
+  .hamburger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: var(--touch-target); height: var(--touch-target);
+    padding: 0; background: transparent; border: 1px solid var(--color-border);
+    border-radius: 8px; color: var(--color-text); cursor: pointer; flex-shrink: 0;
+  }
+  .hamburger:hover { background: var(--color-surface-muted); }
+
+  .user-chip {
+    display: inline-flex; align-items: center; gap: var(--space-1);
+    max-width: 160px; padding: 0 var(--space-1); min-height: var(--control-height);
+    background: var(--color-surface-muted); border-radius: var(--radius-pill);
+    font-size: 14px; font-weight: 600; color: var(--color-text);
+  }
+  .user-chip__avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--color-primary); color: #fff; font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .user-chip__name { min-width: 0; }
+
+  .btn-logout-compact { flex-shrink: 0; }
+
+  /* ---------- SIDEBAR ---------- */
+  .app-sidebar { display: none; }
+
+  /* ---------- MAIN ---------- */
+  .app-main {
+    min-width: 0; max-width: 100%;
+    padding: var(--space-2);
+    padding-bottom: calc(var(--space-4) + var(--safe-bottom));
+    overflow-x: hidden;
+  }
+  .app-main > * { min-width: 0; }
+
+  /* ---------- BRAND ---------- */
+  .brand { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+  .brand__mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; flex-shrink: 0;
+    border-radius: 10px; background: var(--color-primary); color: #fff;
+    font-size: 20px; font-weight: 700;
+  }
+  .brand__text { display: flex; flex-direction: column; min-width: 0; }
+  .brand__name { font-size: 16px; font-weight: 600; color: var(--color-text); }
+  .brand__tagline { font-size: 12px; color: var(--color-text-secondary-aa); }
+
+  /* ---------- NAV ---------- */
+  .nav-group { margin-bottom: var(--space-1); }
+  .nav-group-header {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-1);
+    width: 100%; min-height: var(--control-height); padding: 0 var(--space-1);
+    background: transparent; border: 0; border-radius: 8px;
+    color: var(--color-text-secondary-aa);
+    font-family: inherit; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  }
+  .nav-group-header:hover { background: var(--color-surface-muted); color: var(--color-text); }
+  .nav-group-header[aria-expanded='true'] { color: var(--color-primary-hover); }
+  .nav-chevron { flex-shrink: 0; transition: transform 0.15s ease; }
+  .nav-chevron[data-open='true'] { transform: rotate(90deg); }
+  .nav-group-content { display: flex; flex-direction: column; gap: 2px; }
+  .nav-group-content[hidden] { display: none; }
+  .nav-link {
+    display: flex; align-items: center; min-height: var(--control-height);
+    padding: 0 var(--space-1); border-radius: 8px;
+    color: var(--color-text-secondary-aa); font-size: 14px; font-weight: 500; text-decoration: none;
+  }
+  .nav-link:hover { background: var(--color-surface-muted); color: var(--color-text); text-decoration: none; }
+  .nav-link[aria-current='page'] {
+    background: var(--color-primary-bg); color: var(--color-primary-hover);
+    font-weight: 600; box-shadow: inset 3px 0 0 var(--color-primary);
+  }
+  .nav-link-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- DRAWER ---------- */
+  .drawer-backdrop {
+    position: fixed; inset: 0; z-index: 900;
+    display: flex; background: rgba(61, 47, 35, 0.45);
+  }
+  .app-drawer {
+    display: flex; flex-direction: column; gap: var(--space-1);
+    width: min(300px, 86vw); max-width: 86vw; height: 100%;
+    padding: var(--space-2); background: var(--color-card);
+    border-right: 1px solid var(--color-border); box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+  }
+  .drawer-header {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-1);
+    padding-bottom: var(--space-1); border-bottom: 1px solid var(--color-border);
+  }
+  .drawer-close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: var(--touch-target); height: var(--touch-target); padding: 0;
+    background: transparent; border: 1px solid var(--color-border);
+    border-radius: 8px; color: var(--color-text); cursor: pointer; flex-shrink: 0;
+  }
+  .drawer-close:hover { background: var(--color-surface-muted); }
+  .drawer-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .drawer-footer {
+    display: flex; flex-direction: column; gap: var(--space-1);
+    padding-top: var(--space-1); border-top: 1px solid var(--color-border);
+  }
+
+  /* ---------- USUARIO ---------- */
+  .user-card {
+    display: flex; align-items: center; gap: var(--space-1);
+    min-width: 0; padding: var(--space-1); border-radius: 8px; background: var(--color-surface-muted);
+  }
+  .user-card__avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%;
+    background: var(--color-primary); color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .user-card__text { display: flex; flex-direction: column; min-width: 0; }
+  .user-card__text strong { font-size: 14px; font-weight: 600; color: var(--color-text); }
+  .user-card__role { font-size: 12px; color: var(--color-text-secondary-aa); }
+
+  /* ---------- MODAL ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: var(--space-2);
+    background: rgba(61, 47, 35, 0.45);
+  }
+  .modal {
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
+    width: 100%; max-width: 380px; padding: var(--space-3);
+    text-align: center; background: var(--color-card);
+    border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  }
+  .modal__icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--color-error-bg); color: var(--color-error-dark);
+  }
+  .modal__title { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text); }
+  .modal__text { margin: 0; font-size: 14px; color: var(--color-text-secondary-aa); }
+  .modal__actions { display: flex; gap: var(--space-1); width: 100%; margin-top: var(--space-1); }
+  .modal__actions > * { flex: 1 1 0; }
+
+  /* ---------- DESKTOP ---------- */
+  @media (min-width: 1024px) {
+    .app-header { display: none; }
+
+    .app-sidebar {
+      position: fixed; top: 0; left: 0; z-index: 50;
+      display: flex; flex-direction: column; gap: var(--space-2);
+      width: 264px; height: 100svh;
+      padding: var(--space-2);
+      background: var(--color-card); border-right: 1px solid var(--color-border);
+      overflow-y: auto;
+    }
+    .sidebar-nav { flex: 1 1 auto; min-height: 0; }
+    .sidebar-footer {
+      display: flex; flex-direction: column; gap: var(--space-1);
+      padding-top: var(--space-2); border-top: 1px solid var(--color-border);
+    }
+    .sidebar-footer > * { width: 100%; }
+
+    .app-main {
+      margin-left: 264px;
+      padding: var(--space-3);
+      padding-bottom: calc(var(--space-4) + var(--safe-bottom));
+    }
+  }
+
+  @media (max-width: 420px) {
+    .app-main { padding: var(--space-1); }
+    .user-chip__name { display: none; }
+    .user-chip { padding: 0 4px; }
+  }
+`;

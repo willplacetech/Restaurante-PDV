@@ -10,7 +10,7 @@ export default function PagamentoResultadoModal({
 
   return (
     <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+      position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20
     }}>
       <div onClick={(event) => event.stopPropagation()} style={{

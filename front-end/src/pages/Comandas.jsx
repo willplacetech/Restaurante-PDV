@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { buildNotaVendaHtml, compartilharNotaWhatsApp } from '../utils/notaVenda.js';
+import EmptyState from '../components/EmptyState.jsx';
 
 const formatMoney = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 const formatQuantity = (item) => {
@@ -343,22 +344,28 @@ export default function Comandas() {
       <div className="page-heading"><div><h1>🪑 Mesas / Comandas</h1><p>Abra comandas, lance consumos e feche no caixa.</p></div></div>
       <section className="service-mode-panel"><div className="service-mode-heading"><h2>🪑 Mesas (4)</h2><span>Escolha a mesa ou prossiga em balcão quando todas estiverem ocupadas</span></div><div className="table-shortcuts">{mesasAtivas.map((mesa) => { const aberta = comandas.find((comanda) => comanda.tipoAtendimento !== 'balcao' && String(comanda.mesa || '') === String(mesa)); return <button type="button" key={mesa} className={aberta ? 'table-shortcut occupied' : 'table-shortcut'} onClick={() => createMesa(mesa)}><strong>{mesa}</strong><span>{aberta ? '🟡 Ocupada' : '🟢 Livre'}</span></button>; })}</div><div className="counter-service"><div><strong>📦 Pague e leve — Balcão</strong><span>{comandas.filter((comanda) => comanda.tipoAtendimento === 'balcao').length} pedidos em andamento</span></div>{todasMesasOcupadas && <div style={{ fontSize: 12, color: 'var(--warning-bg)', fontWeight: 700, marginTop: 6 }}>⚠️ Todas as mesas estão em uso. Prosseguir em balcão.</div>}<button type="button" className="comandas-primary-button" onClick={createBalcao}>➕ Novo Pedido</button></div></section>
       <form onSubmit={create} className="comandas-open-form">
-        <input className="comandas-field" placeholder="Nome do cliente" value={newCommand.clienteNome} onChange={(e) => setNewCommand({ ...newCommand, clienteNome: e.target.value })} />
-        <input className="comandas-field" placeholder="Observação" value={newCommand.observacao} onChange={(e) => setNewCommand({ ...newCommand, observacao: e.target.value })} />
-        <button type="submit">Abrir mesa</button>
+        <label className="field">
+          <span className="label">Nome do cliente</span>
+          <input className="comandas-field" value={newCommand.clienteNome} onChange={(e) => setNewCommand({ ...newCommand, clienteNome: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Observação</span>
+          <input className="comandas-field" value={newCommand.observacao} onChange={(e) => setNewCommand({ ...newCommand, observacao: e.target.value })} />
+        </label>
+        <button type="submit" className="btn-primary">Abrir mesa</button>
       </form>
 
       <div className="comandas-columns">
         <section className={`comandas-card comandas-list-card ${mobileView === 'detail' ? 'mobile-hidden' : ''}`}>
           <div className="comandas-card-heading"><div><h2>Em aberto</h2><p>Selecione uma comanda para editar.</p></div><span className="comandas-count">{comandas.length}</span></div>
           <div className="comandas-quick-products"><strong>Lançamento rápido</strong><div>{products.filter((product) => product.categoria !== 'Insumos').slice(0, 8).map((product) => <button key={product._id} type="button" onClick={() => { setProductId(product._id); setQuantity('1'); }} className={productId === product._id ? 'selected' : ''}>{product.nome}</button>)}</div></div>
-          {comandas.map((command) => <button className="comanda-select-button" key={command._id} onClick={() => { setSelected(command); setMobileView('detail'); }} style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 8, padding: 12, border: selected?._id === command._id ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)', borderRadius: 10, background: 'var(--bg-secondary)' }}>
+          {comandas.length === 0 ? <EmptyState icon="🪑" title="Nenhuma comanda em aberto" description="Escolha uma mesa livre acima ou abra um novo pedido em balcão para começar." /> : comandas.map((command) => <button className="comanda-select-button" key={command._id} onClick={() => { setSelected(command); setMobileView('detail'); }} style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 8, padding: 12, border: selected?._id === command._id ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)', borderRadius: 10, background: 'var(--bg-secondary)' }}>
             <b>{command.tipoAtendimento === 'balcao' ? '📦' : '🪑'} #{command.numero}</b><br /><small>{command.tipoAtendimento === 'balcao' ? `Balcão · ${command.statusBalcao || 'aguardando'}` : 'Mesa'} · {command.clienteNome} · {command.itens.length} itens</small>
           </button>)}
         </section>
 
         <section className={`comandas-card comandas-detail-card ${mobileView === 'list' ? 'mobile-hidden' : ''}`}>
-          {!selected ? <p>Selecione ou abra uma comanda.</p> : <>
+          {!selected ? <EmptyState icon="👆" title="Nenhuma comanda selecionada" description="Escolha uma comanda na lista ao lado para lançar itens e fechar no caixa." /> : <>
             <button type="button" className="comandas-mobile-back" onClick={() => setMobileView('list')}>← Voltar para comandas</button>
             <h2 style={{ marginTop: 0 }}>{selected.tipoAtendimento === 'balcao' ? '📦 Balcão' : '🪑 Mesa'} #{selected.numero} <small style={{ fontWeight: 400, fontSize: 14, color: 'var(--text-secondary)' }}>— {selected.clienteNome}</small></h2>
             {selected.tipoAtendimento === 'balcao' && <div className="balcao-status-bar"><span>Status: <strong>{selected.statusBalcao || 'aguardando'}</strong></span><div>{['aguardando', 'preparando', 'pronto', 'pago', 'entregue'].map((status) => <button type="button" key={status} className={selected.statusBalcao === status ? 'active' : ''} onClick={() => updateBalcaoStatus(status)}>{status}</button>)}</div></div>}
@@ -414,7 +421,7 @@ export default function Comandas() {
 
       {/* ── MODAL DE FECHAMENTO ───────────────────────────────────────────── */}
       {modalFechamento && selected && (
-        <div onClick={() => setModalFechamento(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 16 }}>
+        <div onClick={() => setModalFechamento(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 18, padding: 24, boxShadow: 'var(--shadow-lg)', color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <div>
@@ -540,9 +547,9 @@ export default function Comandas() {
       )}
 
       {modalMoverComanda && (
-        <div onClick={() => setModalMoverComanda(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9002, padding: 16 }}>
+        <div onClick={() => setModalMoverComanda(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9002, padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 18, padding: 24, boxShadow: 'var(--shadow-lg)', color: 'var(--text-primary)' }}>
-            <div style={{ width: 62, height: 62, borderRadius: '50%', margin: '0 auto 12px', background: 'rgba(124,75,30,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>📦</div>
+            <div style={{ width: 62, height: 62, borderRadius: '50%', margin: '0 auto 12px', background: 'var(--color-primary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>📦</div>
             <h3 style={{ margin: '0 0 8px', textAlign: 'center', fontSize: 20 }}>Criar nova comanda?</h3>
             <p style={{ margin: '0 0 16px', textAlign: 'center', fontSize: 14, color: 'var(--text-secondary)' }}>
               Você vai mover <strong>{modalMoverComanda.quantidade}</strong> item{modalMoverComanda.quantidade > 1 ? 'ns' : ''} da comanda <strong>#{modalMoverComanda.origem}</strong> para uma nova comanda.
@@ -581,9 +588,9 @@ export default function Comandas() {
 
       {/* ── MODAL DE SUCESSO ──────────────────────────────────────────────── */}
       {modalSucesso && (
-        <div onClick={() => setModalSucesso(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9001, padding: 16 }}>
+        <div onClick={() => setModalSucesso(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9001, padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 20, padding: 28, textAlign: 'center', boxShadow: 'var(--shadow-lg)', color: 'var(--text-primary)' }}>
-            <div style={{ width: 68, height: 68, borderRadius: '50%', margin: '0 auto 14px', background: 'rgba(16,185,129,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>✅</div>
+            <div style={{ width: 68, height: 68, borderRadius: '50%', margin: '0 auto 14px', background: 'var(--color-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>✅</div>
             <h3 style={{ margin: '0 0 4px', fontSize: 20 }}>Comanda Fechada!</h3>
             <p style={{ margin: '0 0 6px', fontSize: 14, color: 'var(--text-secondary)' }}>
               Comanda <strong style={{ color: 'var(--text-primary)' }}>#{modalSucesso.comanda.numero}</strong> →{' '}
@@ -592,7 +599,7 @@ export default function Comandas() {
             <p style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 800, color: 'var(--accent-primary)' }}>
               {formatMoney(modalSucesso.pedido.total)}
             </p>
-            <div style={{ marginBottom: 18, padding: 12, borderRadius: 10, background: modalSucesso.pedido.nfce?.status === 'autorizada' ? 'rgba(16,185,129,.1)' : 'var(--bg-tertiary)', textAlign: 'left' }}>
+            <div style={{ marginBottom: 18, padding: 12, borderRadius: 10, background: modalSucesso.pedido.nfce?.status === 'autorizada' ? 'var(--color-success-bg)' : 'var(--bg-tertiary)', textAlign: 'left' }}>
               <strong>NFC-e: {modalSucesso.pedido.nfce?.status === 'autorizada' ? 'Autorizada' : modalSucesso.pedido.nfce?.status === 'rejeitada' ? 'Rejeitada' : 'Não emitida'}</strong>
               {modalSucesso.pedido.nfce?.mensagemSeErro && <small style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)' }}>{modalSucesso.pedido.nfce.mensagemSeErro}</small>}
               {modalSucesso.pedido.nfce?.chaveAcesso && <small style={{ display: 'block', marginTop: 5, wordBreak: 'break-all', color: 'var(--text-secondary)' }}>Chave: {modalSucesso.pedido.nfce.chaveAcesso}</small>}
@@ -636,12 +643,14 @@ export default function Comandas() {
               </button>
               {modalSucesso.pedido.nfce?.danfePdf && <button type="button" onClick={abrirDanfe} style={{ width: '100%', padding: '13px', background: 'var(--success-bg)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', minHeight: 50 }}>📄 Abrir DANFE PDF</button>}
               <button onClick={() => imprimirCupom(modalSucesso.pedido, modalSucesso.comanda)}
-                style={{ width: '100%', padding: '13px', background: 'var(--brand-brown, #7c4b1e)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', minHeight: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                🖨️ Imprimir Cupom
+                className="btn-primary"
+                style={{ width: '100%' }}>
+                <span aria-hidden="true">🖨️</span> Imprimir Cupom
               </button>
               <button onClick={enviarComprovante}
-                style={{ width: '100%', padding: '13px', background: '#25d366', color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', minHeight: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                💬 Enviar pelo WhatsApp
+                className="btn-primary"
+                style={{ width: '100%' }}>
+                <span aria-hidden="true">💬</span> Enviar pelo WhatsApp
               </button>
               <button onClick={() => setModalSucesso(null)}
                 style={{ width: '100%', padding: '11px', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 42 }}>

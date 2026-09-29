@@ -7,7 +7,8 @@ import { AuthContext } from '../context/AuthContextDefinition.jsx';
 import DateInput from '../components/DateInput.jsx';
 
 const money = (value) => `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const statusColors = { pago: '#16a34a', pendente: '#d97706', atrasado: '#dc2626' };
+const statusColors = { pago: 'var(--color-success-dark)', pendente: 'var(--color-warning-dark)', atrasado: 'var(--color-error-dark)' };
+const statusBackgrounds = { pago: 'var(--color-success-bg)', pendente: 'var(--color-warning-bg)', atrasado: 'var(--color-error-bg)' };
 const categorias = ['Aluguel', 'Energia', 'Água', 'Internet', 'Fornecedores/Insumos', 'Salários/Pró-labore', 'Impostos', 'Marketing', 'Manutenção', 'Transporte', 'Outros'];
 const percentChange = (current, previous) => previous ? ((current - previous) / Math.abs(previous)) * 100 : (current ? 100 : 0);
 const dateKey = (value) => {
@@ -148,7 +149,17 @@ export default function Financeiro() {
 
   if (!user || user.role !== 'admin') return <Navigate to="/pdv" replace />;
 
-  if (carregando) return <><AreaTabs area="dashboard" /><div className="financeiro-page"><section className="financeiro-panel financeiro-state"><h2>Carregando financeiro...</h2><p>Consultando despesas, caixa e DRE.</p></section></div></>;
+  if (carregando) return <>
+    <AreaTabs area="dashboard" />
+    <div className="financeiro-page">
+      <header className="page-heading">
+        <div><span className="eyebrow">Gestão da casa</span><h1>Financeiro</h1><p>Despesas, fluxo de caixa e demonstrativo de resultado.</p></div>
+      </header>
+      <div className="state" role="status" aria-live="polite">
+        <span className="state__text">Carregando dados financeiros...</span>
+      </div>
+    </div>
+  </>;
 
   const salvarDespesa = async (event) => {
     event.preventDefault();
@@ -286,8 +297,8 @@ export default function Financeiro() {
     <span
       className="financeiro-status"
       style={{
-        background: `${statusColors[status] || '#64748b'}20`,
-        color: statusColors[status] || '#64748b',
+        background: statusBackgrounds[status] || 'var(--color-surface-muted)',
+        color: statusColors[status] || 'var(--color-text-secondary-aa)',
       }}
     >
       {status}
@@ -437,7 +448,13 @@ export default function Financeiro() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="financeiro-empty">Nenhuma despesa encontrada.</td>
+                      <td colSpan="6">
+                        <div className="state">
+                          <span className="state__icon" aria-hidden="true">🧾</span>
+                          <span className="state__title">Nenhuma despesa no período</span>
+                          <span className="state__text">Registre as despesas do mês para acompanhar o resultado do demonstrativo.</span>
+                        </div>
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -789,7 +806,7 @@ export default function Financeiro() {
         }
 
         .financeiro-error {
-          border-color: rgba(220, 38, 38, .35);
+          border-color: var(--color-error-border);
         }
 
         .financeiro-error button {
@@ -953,17 +970,17 @@ export default function Financeiro() {
           justify-content: center;
           min-height: 36px;
           padding: 8px 10px;
-          border: 1px solid rgba(220, 38, 38, .3);
+          border: 1px solid var(--color-error-border);
           border-radius: 8px;
-          background: rgba(220, 38, 38, .08);
-          color: #dc2626;
+          background: var(--color-error-bg);
+          color: var(--color-error-dark);
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
         }
 
         .financeiro-delete-button:hover {
-          background: rgba(220, 38, 38, .14);
+          background: var(--color-error-bg);
         }
 
         .financeiro-recurring-option {

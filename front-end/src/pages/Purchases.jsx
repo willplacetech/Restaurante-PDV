@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 const units = ['kg', 'L', 'un'];
 const decimalStep = (unit) => unit === 'un' ? '0.01' : '0.001';
@@ -11,7 +12,6 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 const money = (value) => `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const number = (value) => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const categoriasVenda = ['Bebidas Quentes', 'Bebidas geladas', 'Salgados', 'Doces', 'Congelados', 'Sorvetes', 'Pratos na Hora', 'Outros'];
 const formatQuantidade = (valor, unidade) => `${Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${unidade}`;
 const formatCustoUnitario = (valor, unidade) => `R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/${unidade}`;
@@ -44,6 +44,7 @@ export default function Purchases() {
   const [savingSupply, setSavingSupply] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedPurchaseId, setExpandedPurchaseId] = useState(null);
+  const [aba, setAba] = useState('entrada');
   const { showToast } = useToast();
 
   const load = async () => {
@@ -52,7 +53,7 @@ export default function Purchases() {
       setProducts(productsResponse.data || []);
       setPurchases(purchasesResponse.data || []);
     } catch (error) {
-      showToast(error.response?.data?.msg || 'Nao foi possivel carregar as compras', 'error');
+      showToast(error.response?.data?.msg || 'Não foi possível carregar as compras', 'error');
     }
   };
 
@@ -63,7 +64,7 @@ export default function Purchases() {
         setProducts(productsResponse.data || []);
         setPurchases(purchasesResponse.data || []);
       } catch (error) {
-        showToast(error.response?.data?.msg || 'Nao foi possivel carregar as compras', 'error');
+        showToast(error.response?.data?.msg || 'Não foi possível carregar as compras', 'error');
       }
     };
     loadInitialData();
@@ -157,7 +158,7 @@ export default function Purchases() {
       showToast('Insumo cadastrado e selecionado na compra', 'success');
     } catch (error) {
       const validationMessage = error.response?.data?.errors?.map((item) => item.msg).join('; ');
-      showToast(error.response?.data?.msg || validationMessage || 'Nao foi possivel cadastrar o insumo', 'error');
+      showToast(error.response?.data?.msg || validationMessage || 'Não foi possível cadastrar o insumo', 'error');
     } finally {
       setSavingSupply(false);
     }
@@ -173,22 +174,38 @@ export default function Purchases() {
       setForm({ fornecedor: '', numeroNF: '', data: today(), metodoCusteio: 'media_ponderada', itens: [newItem()] });
       await load();
     } catch (error) {
-      showToast(error.response?.data?.msg || 'Nao foi possivel registrar a compra', 'error');
+      showToast(error.response?.data?.msg || 'Não foi possível registrar a compra', 'error');
     } finally {
       setSaving(false);
     }
   };
 
   return <div className="purchases-page">
-    <header className="page-heading"><div><span className="purchases-eyebrow">PRODUCAO / COMPRAS</span><h1>Compras</h1><p>Registre entradas de insumos e atualize o custo pelo recebimento.</p></div></header>
-    <form className="purchases-form" onSubmit={submit}>
-      <div className="purchases-grid">
-        <label>Fornecedor<input required value={form.fornecedor} onChange={(event) => setForm({ ...form, fornecedor: event.target.value })} /></label>
-        <label>Numero da NF<input required value={form.numeroNF} onChange={(event) => setForm({ ...form, numeroNF: event.target.value })} /></label>
-        <label>Data<input required type="date" value={form.data} onChange={(event) => setForm({ ...form, data: event.target.value })} /></label>
-        <label>Atualizacao de custo<select value={form.metodoCusteio} onChange={(event) => setForm({ ...form, metodoCusteio: event.target.value })}><option value="media_ponderada">Media ponderada</option><option value="ultimo_preco">Ultimo preco</option></select></label>
+    <header className="page-heading">
+      <div>
+        <span className="eyebrow">Produção / Compras</span>
+        <h1>Compras</h1>
+        <p>Registre entradas de insumos e atualize o custo pelo recebimento.</p>
       </div>
-      <div className="purchases-section-heading"><h2>Itens da compra</h2><button type="button" className="secondary" onClick={addItem}>Adicionar item</button></div>
+    </header>
+
+    <div className="area-tabs" role="tablist" aria-label="Seções de compras">
+      <button type="button" role="tab" aria-selected={aba === 'entrada'} className={aba === 'entrada' ? 'active' : ''} onClick={() => setAba('entrada')}>Lançar entrada</button>
+      <button type="button" role="tab" aria-selected={aba === 'historico'} className={aba === 'historico' ? 'active' : ''} onClick={() => setAba('historico')}>Histórico de compras</button>
+    </div>
+
+    {aba === 'entrada' ? (
+    <form className="purchases-form card" onSubmit={submit}>
+      <div className="card__header">
+        <h2 className="card-title">Nova entrada de compra</h2>
+      </div>
+      <div className="purchases-grid">
+        <label className="field">Fornecedor<input required value={form.fornecedor} onChange={(event) => setForm({ ...form, fornecedor: event.target.value })} /></label>
+        <label className="field">Número da NF<input required value={form.numeroNF} onChange={(event) => setForm({ ...form, numeroNF: event.target.value })} /></label>
+        <label className="field">Data<input required type="date" value={form.data} onChange={(event) => setForm({ ...form, data: event.target.value })} /></label>
+        <label className="field">Atualização de custo<select value={form.metodoCusteio} onChange={(event) => setForm({ ...form, metodoCusteio: event.target.value })}><option value="media_ponderada">Média ponderada</option><option value="ultimo_preco">Último preço</option></select></label>
+      </div>
+      <div className="purchases-section-heading"><h2 className="card-title">Itens da compra</h2><button type="button" className="btn-secondary" onClick={addItem}>Adicionar item</button></div>
       <div className="purchase-items">{form.itens.map((item, index) => {
         const unidadeConteudo = item.unidadeConteudo || 'un';
         const total = Number(item.qtdEmbalagens || 0) * Number(item.conteudoPorEmbalagem || 0);
@@ -197,47 +214,63 @@ export default function Purchases() {
         const metaProduto = getInsumoMeta(produtoSelecionado || { unidadeConteudo, precoCompra: item.valorTotal, conteudoPorEmbalagem: item.conteudoPorEmbalagem || 1, custoUnitarioBase: unitCost, estoqueInsumos: item.qtdEmbalagens || 0 });
         const unidadeExibicao = metaProduto.unidadeConteudo || unidadeConteudo;
         const valorUnitario = Number(metaProduto.custoUnitarioBase || unitCost || 0);
-        return <div className="purchase-item" key={`purchase-item-${index}`}>
-          <label className="purchase-product-field">Produto comprado<div className="purchase-product-input-group"><select required value={item.produtoId} onChange={(event) => updateItem(index, 'produtoId', event.target.value)}><option value="">Selecione</option>{products.map((product) => <option key={product._id} value={product._id}>{product.nome} [{product.tipo === 'insumo' ? 'Insumo' : 'Revenda'}]</option>)}</select><button type="button" className="secondary purchase-new-supply-button" onClick={() => openSupplyModal(index)}>➕ Novo Produto</button></div></label>
-          <label>Valor total<input required type="number" min="0.01" step="0.01" value={item.valorTotal} onChange={(event) => updateItem(index, 'valorTotal', event.target.value)} /></label>
-          <label>Qtd. embalagens<input required type="number" min="1" step="1" value={item.qtdEmbalagens} onChange={(event) => updateItem(index, 'qtdEmbalagens', event.target.value)} /></label>
-          <label>Quantidade<input required type="number" min={decimalMinimum(item.unidadeConteudo)} step={decimalStep(item.unidadeConteudo)} value={item.conteudoPorEmbalagem} onChange={(event) => updateItem(index, 'conteudoPorEmbalagem', event.target.value)} /></label>
-          <label>Unidade<select required value={item.unidadeConteudo} onChange={(event) => updateItem(index, 'unidadeConteudo', event.target.value)}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
-          <div className="purchase-calculation"><span>Total: <strong>{formatQuantidade(total, unidadeExibicao)}</strong></span><span>Custo unitario: <strong>{formatCustoUnitario(valorUnitario, unidadeExibicao)}</strong></span></div>
-          <button type="button" className="danger" onClick={() => removeItem(index)} disabled={form.itens.length === 1}>Remover</button>
+        return <div className="purchase-item card" key={`purchase-item-${index}`}>
+          <label className="purchase-product-field field">Produto comprado<div className="purchase-product-input-group"><select required aria-label={`Produto comprado, item ${index + 1}`} value={item.produtoId} onChange={(event) => updateItem(index, 'produtoId', event.target.value)}><option value="">Selecione</option>{products.map((product) => <option key={product._id} value={product._id}>{product.nome} [{product.tipo === 'insumo' ? 'Insumo' : 'Revenda'}]</option>)}</select><button type="button" className="btn-secondary purchase-new-supply-button" onClick={() => openSupplyModal(index)}>➕ Novo Produto</button></div></label>
+          <label className="field">Valor total<input required type="number" min="0.01" step="0.01" value={item.valorTotal} onChange={(event) => updateItem(index, 'valorTotal', event.target.value)} /></label>
+          <label className="field">Qtd. embalagens<input required type="number" min="1" step="1" value={item.qtdEmbalagens} onChange={(event) => updateItem(index, 'qtdEmbalagens', event.target.value)} /></label>
+          <label className="field">Quantidade<input required type="number" min={decimalMinimum(item.unidadeConteudo)} step={decimalStep(item.unidadeConteudo)} value={item.conteudoPorEmbalagem} onChange={(event) => updateItem(index, 'conteudoPorEmbalagem', event.target.value)} /></label>
+          <label className="field">Unidade<select required aria-label={`Unidade do item ${index + 1}`} value={item.unidadeConteudo} onChange={(event) => updateItem(index, 'unidadeConteudo', event.target.value)}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+          <div className="purchase-calculation"><span>Total: <strong>{formatQuantidade(total, unidadeExibicao)}</strong></span><span>Custo unitário: <strong>{formatCustoUnitario(valorUnitario, unidadeExibicao)}</strong></span></div>
+          <button type="button" className="btn-danger" onClick={() => removeItem(index)} disabled={form.itens.length === 1}>Remover</button>
         </div>;
       })}</div>
-      <button className="primary" disabled={saving}>{saving ? 'Registrando...' : 'Registrar compra'}</button>
+      <div className="btn-row"><button className="btn-primary" disabled={saving}>{saving ? 'Registrando...' : 'Registrar compra'}</button></div>
     </form>
-    <section className="purchases-history">
-      <div className="purchases-section-heading"><h2>Historico de compras</h2><span>{purchases.length} registro(s)</span></div>
-      {purchases.length ? purchases.map((purchase) => {
+    ) : (
+    <section className="purchases-history card">
+      <div className="card__header">
+        <h2 className="card-title">Histórico de compras</h2>
+        <span className="badge badge--neutral">{purchases.length} {purchases.length === 1 ? 'registro' : 'registros'}</span>
+      </div>
+      {purchases.length === 0 ? (
+        <EmptyState
+          icon="🧾"
+          title="Nenhuma compra registrada"
+          description="Assim que você lançar a primeira entrada de insumos, o histórico aparece aqui."
+        >
+          <button type="button" className="btn-primary" onClick={() => setAba('entrada')}>Lançar entrada</button>
+        </EmptyState>
+      ) : purchases.map((purchase) => {
         const isExpanded = expandedPurchaseId === purchase._id;
         const itens = purchase.itens || [];
         return (
-          <article key={purchase._id} className={`purchase-history-card ${isExpanded ? 'expanded' : ''}`}>
-            <div className="purchase-history-header" onClick={() => setExpandedPurchaseId(isExpanded ? null : purchase._id)}>
-              <div>
+          <article key={purchase._id} className={`purchase-history-card${isExpanded ? ' expanded' : ''}`}>
+            <button type="button" className="purchase-history-header" aria-expanded={isExpanded} onClick={() => setExpandedPurchaseId(isExpanded ? null : purchase._id)}>
+              <span>
                 <strong>{purchase.fornecedor}</strong>
-                <span>NF {purchase.numeroNF} · {new Date(purchase.data).toLocaleDateString('pt-BR')}</span>
-              </div>
-              <div className="purchase-history-summary">
+                <small>NF {purchase.numeroNF} · {new Date(purchase.data).toLocaleDateString('pt-BR')}</small>
+              </span>
+              <span className="purchase-history-summary">
                 <b>{money(purchase.valorTotal)}</b>
-                <span className="expand-icon">{isExpanded ? '▲' : '▼'}</span>
-              </div>
-            </div>
+                <svg className="expand-icon" data-open={isExpanded ? 'true' : 'false'} width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
             {isExpanded && (
               <div className="purchase-history-details">
+                <div className="table-wrap">
                 <table className="purchase-items-table">
+                  <caption className="visually-hidden">Itens da compra {purchase.numeroNF}</caption>
                   <thead>
                     <tr>
-                      <th>Produto</th>
-                      <th>Qtd. Embalagens</th>
-                      <th>Conteúdo/Emb.</th>
-                      <th>Unidade</th>
-                      <th>Qtd. Total</th>
-                      <th>Valor Total</th>
-                      <th>Custo Unit.</th>
+                      <th scope="col">Produto</th>
+                      <th scope="col" className="num">Qtd. embalagens</th>
+                      <th scope="col" className="num">Conteúdo/emb.</th>
+                      <th scope="col">Unidade</th>
+                      <th scope="col" className="num">Qtd. total</th>
+                      <th scope="col" className="num">Valor total</th>
+                      <th scope="col" className="num">Custo unit.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -248,17 +281,18 @@ export default function Purchases() {
                       return (
                         <tr key={index}>
                           <td>{produto.nome || '—'}</td>
-                          <td>{Number(item.qtdEmbalagens || 0).toLocaleString('pt-BR')}</td>
-                          <td>{Number(item.conteudoPorEmbalagem || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
+                          <td className="num">{Number(item.qtdEmbalagens || 0).toLocaleString('pt-BR')}</td>
+                          <td className="num">{Number(item.conteudoPorEmbalagem || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
                           <td>{item.unidadeConteudo || 'un'}</td>
-                          <td>{quantidadeTotal.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
-                          <td>{money(item.valorTotal)}</td>
-                          <td>{custoUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/{item.unidadeConteudo || 'un'}</td>
+                          <td className="num">{quantidadeTotal.toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
+                          <td className="num">{money(item.valorTotal)}</td>
+                          <td className="num">{custoUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/{item.unidadeConteudo || 'un'}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+                </div>
                 <div className="purchase-history-footer">
                   <span><strong>Método de custeio:</strong> {purchase.metodoCusteio === 'media_ponderada' ? 'Média ponderada' : 'Último preço'}</span>
                   <span><strong>Data da compra:</strong> {new Date(purchase.data).toLocaleDateString('pt-BR')}</span>
@@ -268,8 +302,9 @@ export default function Purchases() {
             )}
           </article>
         );
-      }) : <p>Nenhuma compra registrada.</p>}
+      })}
     </section>
+    )}
     {supplyModalOpen && <div className="purchase-supply-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSupplyModalOpen(false); }}>
       <form onSubmit={saveSupply} className="purchase-supply-modal" role="dialog" aria-modal="true" aria-labelledby="new-supply-title">
         <div className="purchase-supply-modal-header"><div><h2 id="new-supply-title">➕ Novo Produto</h2><p>Cadastre o insumo e continue o lançamento da compra.</p></div><button type="button" className="purchase-supply-button purchase-supply-close" onClick={() => setSupplyModalOpen(false)} aria-label="Fechar modal">×</button></div>
@@ -287,12 +322,135 @@ export default function Purchases() {
     </div>}
     <style>{styles}</style>
     <style>{modalStyles}</style>
-    <style>{modalControlStyles}</style>
   </div>;
 }
 
-const styles = `.purchases-page{display:grid;gap:16px;color:var(--text-primary)}.purchases-eyebrow{color:var(--accent-primary);font-size:10px;font-weight:800;letter-spacing:.1em}.purchases-form,.purchases-history{padding:18px;border:1px solid var(--border-color);border-radius:16px;background:var(--bg-secondary);box-shadow:var(--shadow-sm)}.purchases-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.purchases-form label{display:grid;gap:5px;color:var(--text-secondary);font-size:12px;font-weight:700}.purchases-form input,.purchases-form select{box-sizing:border-box;width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--border-color);border-radius:8px;background:var(--input-bg);color:var(--input-text);font:inherit}.purchases-section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 12px}.purchases-section-heading h2{margin:0;font-size:17px}.purchase-items{display:grid;gap:10px}.purchase-item{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr .8fr;gap:10px;padding:14px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-tertiary)}.purchase-product-field{display:grid;gap:6px;color:var(--text-secondary);font-size:12px;font-weight:700}.purchase-product-input-group{display:flex;gap:8px;align-items:stretch}.purchase-product-input-group select{flex:1;box-sizing:border-box;width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--border-color);border-radius:8px;background:var(--input-bg);color:var(--input-text);font:inherit}.purchase-new-supply-button{white-space:nowrap}.purchase-calculation{grid-column:1/-1;display:flex;gap:20px;color:var(--text-secondary);font-size:12px}.purchase-calculation strong{color:var(--accent-primary)}.primary,.secondary,.danger{min-height:38px;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}.primary{margin-top:14px;border:0;background:var(--accent-primary);color:#fff}.secondary{border:1px solid var(--accent-border);background:var(--accent-light);color:var(--accent-primary)}.danger{border:1px solid rgba(220,38,38,.2);background:rgba(220,38,38,.08);color:var(--error-bg)}.purchases-history{display:grid;gap:10px}.purchase-history-card{border:1px solid var(--border-light);border-radius:10px;background:var(--bg-tertiary);overflow:hidden}.purchase-history-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;gap:16px}.purchase-history-header:hover{background:var(--bg-hover)}.purchase-history-header strong{display:block;color:var(--text-primary);font-size:15px}.purchase-history-header span{color:var(--text-secondary);font-size:12px}.purchase-history-summary{display:flex;align-items:center;gap:12px;white-space:nowrap}.purchase-history-summary b{color:var(--accent-primary);font-size:16px}.expand-icon{color:var(--text-secondary);font-size:12px;transition:transform .2s ease}.purchase-history-details{padding:0 16px 16px;border-top:1px solid var(--border-light);animation:expandIn .2s ease}.purchase-items-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}.purchase-items-table th,.purchase-items-table td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border-light)}.purchase-items-table th{color:var(--text-secondary);font-weight:700;background:var(--bg-secondary)}.purchase-items-table td{color:var(--text-primary)}.purchase-items-table tr:last-child td{border-bottom:none}.purchase-history-footer{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);color:var(--text-secondary);font-size:12px}.purchase-history-footer strong{color:var(--text-primary)}@keyframes expandIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}@media(max-width:800px){.purchases-grid{grid-template-columns:repeat(2,1fr)}.purchase-item{grid-template-columns:1fr 1fr}.purchase-item label:first-child,.purchase-calculation{grid-column:1/-1}}@media(max-width:520px){.purchases-grid{grid-template-columns:1fr}.purchase-item{grid-template-columns:1fr}.purchase-item label:first-child,.purchase-calculation{grid-column:auto}.purchase-calculation{display:grid;gap:4px}.purchase-items-table{font-size:11px}.purchase-items-table th,.purchase-items-table td{padding:6px 8px}}`;
+const styles = `
+  .purchases-page { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+  .purchases-page, .purchases-page * { box-sizing: border-box; }
 
-const modalStyles = `.purchase-supply-modal-backdrop{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.48)}.purchase-supply-modal{width:min(560px,100%);max-height:90vh;overflow-y:auto;padding:20px;border:1px solid var(--border-color);border-radius:16px;background:var(--bg-secondary);color:var(--text-primary);box-shadow:var(--shadow-lg)}.purchase-supply-modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.purchase-supply-modal-header h2{margin:0;color:var(--brand-brown);font:700 21px var(--font-heading)}.purchase-supply-modal-header p{margin:6px 0 0;color:var(--text-secondary);font-size:13px;line-height:1.45}.purchase-supply-close{width:36px;min-width:36px;height:36px;padding:0;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-tertiary);color:var(--text-secondary);font-size:24px;line-height:1;cursor:pointer}.purchase-supply-close:hover{border-color:var(--accent-primary);color:var(--accent-primary)}.purchase-supply-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.purchase-supply-field{display:grid;gap:5px;color:var(--text-secondary);font-size:12px;font-weight:700}.purchase-supply-field.full{grid-column:1/-1}.purchase-supply-field input,.purchase-supply-field select{box-sizing:border-box;width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--input-text);font:inherit}.purchase-supply-note{margin-top:16px;padding:10px 12px;border:1px solid var(--warning-bg);border-left:4px solid var(--warning-bg);border-radius:8px;background:rgba(217,119,6,.08);color:var(--text-primary);font-size:12px;line-height:1.5}.purchase-supply-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.purchase-supply-actions .primary,.purchase-supply-actions .secondary{margin-top:0;min-height:42px;padding:9px 14px}@media(max-width:560px){.purchase-supply-modal-backdrop{align-items:end;padding:8px}.purchase-supply-modal{max-height:calc(100vh - 16px);padding:16px;border-radius:12px}.purchase-supply-modal-header{gap:10px;margin-bottom:14px}.purchase-supply-modal-header h2{font-size:19px}.purchase-supply-grid{grid-template-columns:1fr;gap:10px}.purchase-supply-field.full{grid-column:auto}.purchase-supply-actions{display:grid;grid-template-columns:1fr;gap:8px}.purchase-supply-actions button{width:100%}}`;
+  .purchases-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); }
+  .purchases-grid > * { min-width: 0; }
 
-const modalControlStyles = `.purchase-supply-modal-backdrop{z-index:10000}.purchase-supply-modal,.purchase-supply-modal *{box-sizing:border-box}.purchase-supply-modal button{font-family:var(--font-body);font-size:13px;font-weight:700;line-height:1.2}.purchase-supply-modal input,.purchase-supply-modal select{min-height:44px;border:1px solid var(--input-border);border-radius:8px;outline:none;box-shadow:none}.purchase-supply-modal input:focus,.purchase-supply-modal select:focus{border-color:var(--accent-primary);box-shadow:0 0 0 3px var(--accent-light)}.purchase-supply-button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 16px;border-radius:8px;cursor:pointer;transition:background-color .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}.purchase-supply-button:active{transform:scale(.98)}.purchase-supply-button:disabled{cursor:wait;opacity:.65}.purchase-supply-button-primary{border:1px solid var(--accent-primary);background:var(--accent-primary);color:#fff}.purchase-supply-button-primary:hover{border-color:var(--accent-secondary);background:var(--accent-secondary)}.purchase-supply-button-secondary{border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary)}.purchase-supply-button-secondary:hover{border-color:var(--accent-primary);background:var(--accent-light);color:var(--accent-primary)}.purchase-supply-close{font-size:22px!important;font-weight:400!important}.purchase-supply-actions{align-items:center}.purchase-supply-actions .purchase-supply-button{margin-top:0}@media(max-width:560px){.purchase-supply-button{min-height:44px}.purchase-supply-actions{align-items:stretch}}`;
+  .purchases-section-heading {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-1); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-1);
+  }
+
+  .purchase-items { display: grid; gap: var(--space-1); }
+  .purchase-item {
+    display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr));
+    gap: var(--space-1); padding: var(--space-2);
+    background: var(--color-page);
+  }
+  .purchase-item > * { min-width: 0; }
+
+  .purchase-product-field { grid-column: 1 / -1; }
+  .purchase-product-input-group { display: flex; gap: var(--space-1); align-items: stretch; }
+  .purchase-product-input-group > * { min-width: 0; }
+  .purchase-product-input-group select { flex: 1 1 auto; }
+  .purchase-new-supply-button { flex-shrink: 0; white-space: nowrap; }
+
+  .purchase-calculation {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2);
+    font-size: 12px; color: var(--color-text-secondary-aa);
+  }
+  .purchase-calculation strong { color: var(--color-primary-hover); font-weight: 700; }
+
+  .purchases-history { gap: var(--space-1); }
+  .purchase-history-card {
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-page); overflow: hidden;
+  }
+  .purchase-history-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-1); width: 100%; min-width: 0;
+    padding: var(--space-1) var(--space-2);
+    background: transparent; border: 0; color: var(--color-text);
+    font-family: inherit; text-align: left; cursor: pointer;
+  }
+  .purchase-history-header:hover { background: var(--color-surface-muted); }
+  .purchase-history-header > span:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .purchase-history-header strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+  .purchase-history-header small { font-size: 12px; color: var(--color-text-secondary-aa); }
+
+  .purchase-history-summary { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
+  .purchase-history-summary b { font-size: 16px; font-weight: 700; color: var(--color-primary-hover); font-variant-numeric: tabular-nums; }
+  .expand-icon { color: var(--color-text-secondary-aa); transition: transform 0.15s ease; }
+  .expand-icon[data-open='true'] { transform: rotate(90deg); }
+
+  .purchase-history-details { padding: 0 var(--space-2) var(--space-2); border-top: 1px solid var(--color-border); }
+  .purchase-items-table { margin-top: var(--space-1); }
+
+  .purchase-history-footer {
+    display: flex; flex-wrap: wrap; gap: var(--space-2);
+    margin-top: var(--space-1); padding-top: var(--space-1);
+    border-top: 1px solid var(--color-border);
+    font-size: 12px; color: var(--color-text-secondary-aa);
+  }
+  .purchase-history-footer strong { color: var(--color-text); }
+
+  @media (max-width: 900px) {
+    .purchases-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .purchase-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 560px) {
+    .purchases-grid { grid-template-columns: minmax(0, 1fr); }
+    .purchase-item { grid-template-columns: minmax(0, 1fr); }
+    .purchase-product-input-group { flex-direction: column; }
+    .purchase-new-supply-button { width: 100%; }
+    .purchase-calculation { display: grid; gap: 4px; }
+  }
+`;
+
+const modalStyles = `
+  .purchase-supply-modal-backdrop {
+    position: fixed; inset: 0; z-index: 10000;
+    display: grid; place-items: center; padding: var(--space-2);
+    background: rgba(61, 47, 35, 0.45);
+  }
+  .purchase-supply-modal {
+    width: min(560px, 100%); max-height: 90vh; overflow-y: auto;
+    padding: var(--space-3); box-sizing: border-box;
+    background: var(--color-card); color: var(--color-text);
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+  }
+  .purchase-supply-modal-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: var(--space-2); margin-bottom: var(--space-2);
+  }
+  .purchase-supply-modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .purchase-supply-modal-header p { margin: 4px 0 0; font-size: 12px; color: var(--color-text-secondary-aa); }
+
+  .purchase-supply-close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target);
+    padding: 0; flex-shrink: 0;
+    background: transparent; border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm); color: var(--color-text); font-size: 22px; line-height: 1; cursor: pointer;
+  }
+  .purchase-supply-close:hover { background: var(--color-surface-muted); }
+
+  .purchase-supply-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
+  .purchase-supply-grid > * { min-width: 0; }
+  .purchase-supply-field.full { grid-column: 1 / -1; }
+
+  .purchase-supply-note {
+    margin-top: var(--space-2); padding: var(--space-1) var(--space-2);
+    background: var(--color-warning-bg); border: 1px solid var(--color-warning-border);
+    border-left: 3px solid var(--color-warning); border-radius: var(--radius-sm);
+    font-size: 12px; color: var(--color-warning-dark);
+  }
+  .purchase-supply-actions { display: flex; justify-content: flex-end; gap: var(--space-1); margin-top: var(--space-2); }
+
+  @media (max-width: 560px) {
+    .purchase-supply-modal-backdrop { align-items: flex-end; padding: var(--space-1); }
+    .purchase-supply-modal { max-height: calc(100vh - 16px); padding: var(--space-2); }
+    .purchase-supply-grid { grid-template-columns: minmax(0, 1fr); }
+    .purchase-supply-field.full { grid-column: auto; }
+    .purchase-supply-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .purchase-supply-actions button { width: 100%; }
+  }
+`;

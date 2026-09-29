@@ -197,7 +197,7 @@ export default function Orders() {
       {/* Modal Detalhes */}
       {selecionado && (
         <div onClick={() => setSelecionado(null)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+          position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)',
           display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
           zIndex: 100, padding: 0
         }} className="modal-bg">

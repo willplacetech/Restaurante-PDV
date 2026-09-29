@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const displayDate = (value) => {
   if (!value) return '';
@@ -19,10 +19,13 @@ const isoDate = (value) => {
 
 export default function DateInput({ value, onChange, style, ...props }) {
   const [text, setText] = useState(displayDate(value));
+  const [valorExterno, setValorExterno] = useState(value);
 
-  useEffect(() => {
+  // Reflete a mudanca externa de `value` sem efeito colateral.
+  if (value !== valorExterno) {
+    setValorExterno(value);
     setText(displayDate(value));
-  }, [value]);
+  }
 
   const handleChange = (event) => {
     const digits = event.target.value.replace(/\D/g, '').slice(0, 8);

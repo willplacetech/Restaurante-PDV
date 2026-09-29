@@ -8,8 +8,8 @@ import DateInput from '../components/DateInput.jsx';
 
 const statusCor = {
   pendente: { bg: 'var(--accent-light)', txt: 'var(--accent-primary)', label: 'Pendente' },
-  parcial: { bg: 'rgba(210,137,48,.16)', txt: 'var(--warning-bg)', label: 'Pagamento parcial' },
-  pago: { bg: 'rgba(22,163,74,.12)', txt: 'var(--success-bg)', label: 'Quitado' },
+  parcial: { bg: 'var(--color-warning-bg)', txt: 'var(--warning-bg)', label: 'Pagamento parcial' },
+  pago: { bg: 'var(--color-success-bg)', txt: 'var(--success-bg)', label: 'Quitado' },
   cancelado: { bg: 'var(--bg-tertiary)', txt: 'var(--text-secondary)', label: 'Cancelado' }
 };
 
@@ -713,7 +713,7 @@ Obrigado! 🙏`
 
             return (
               <div key={pedido._id} style={{
-                background: estaSelecionado ? 'rgba(22,163,74,.12)' : 'var(--bg-secondary)', 
+                background: estaSelecionado ? 'var(--color-success-bg)' : 'var(--bg-secondary)', 
                 border: estaSelecionado ? '2px solid var(--success-bg)' : '1px solid var(--border-color)', 
                 borderRadius: 14, padding: 16,
                 transition: 'all 0.15s'
@@ -854,7 +854,7 @@ Obrigado! 🙏`
       {/* ✅ MODAL DE RECEBIMENTO MÚLTIPLO (para marcados) */}
       {pagamentoMultiploModal && (
         <div onClick={() => setPagamentoMultiploModal(null)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+          position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20
         }}>
           <div onClick={e => e.stopPropagation()} style={{
@@ -902,7 +902,7 @@ Obrigado! 🙏`
       {/* ✅ MODAL DE RECEBIMENTO INDIVIDUAL */}
       {pagamentoModal && (
         <div onClick={() => setPagamentoModal(null)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+          position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20
         }}>
           <div onClick={e => e.stopPropagation()} style={{
@@ -953,7 +953,7 @@ Obrigado! 🙏`
       )}
 
       {novoPedidoModal && (
-        <div onClick={() => setNovoPedidoModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20 }}>
+        <div onClick={() => setNovoPedidoModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20 }}>
           <div onClick={event => event.stopPropagation()} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 6px' }}>➕ Novo pedido na conta</h3>
             <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>Pedido #{novoPedidoModal.numero} · {novoPedidoModal.clienteNome}</p>
@@ -979,7 +979,7 @@ Obrigado! 🙏`
       />
 
       {quitarClienteModal && (
-        <div onClick={() => setQuitarClienteModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20 }}>
+        <div onClick={() => setQuitarClienteModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(61, 47, 35, .45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 20 }}>
           <div onClick={event => event.stopPropagation()} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380 }}>
             <h3 style={{ margin: '0 0 8px' }}>✅ Quitar total do cliente</h3>
             <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)' }}>Todas as pendências do cliente selecionado serão quitadas.</p>

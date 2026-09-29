@@ -315,12 +315,12 @@ const styles = `
 .movimento-info { display:grid; gap:3px; }
 .movimento-info strong { color:var(--text-primary); font-size:13px; }
 .movimento-info small { color:var(--text-secondary); font-size:11px; }
-.movimento-tipo { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; }
-.mov-entrada { background:rgba(34,197,94,.1); color:var(--success-bg, #22c55e); }
-.mov-saida { background:rgba(239,68,68,.1); color:var(--error-bg); }
-.mov-producao { background:rgba(59,130,246,.1); color:var(--accent-primary); }
-.mov-transferencia { background:rgba(168,85,212,.1); color:#a855f7; }
-.mov-ajuste { background:rgba(140,140,140,.1); color:var(--text-secondary); }
+.movimento-tipo { display:inline-flex; align-items:center; gap:4px; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:600; width:fit-content; }
+.mov-entrada { background:var(--color-success-bg); color:var(--color-success-dark); }
+.mov-saida { background:var(--color-error-bg); color:var(--color-error-dark); }
+.mov-producao { background:var(--color-primary-bg); color:var(--color-primary-hover); }
+.mov-transferencia { background:var(--color-info-bg); color:var(--color-info-dark); }
+.mov-ajuste { background:var(--color-surface-muted); color:var(--color-text-secondary-aa); }
 .movimento-valores { display:grid; justify-items:end; gap:3px; }
 .movimento-quantidade { color:var(--accent-primary); font-size:13px; font-weight:700; }
 .section-heading, .ingredients-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
@@ -328,7 +328,7 @@ const styles = `
 .section-heading > strong { color:var(--accent-primary); }
 .stock-grid, .recipe-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
 .stock-card, .recipe-card, .possible-list { padding:14px; border:1px solid var(--border-light); border-radius:10px; background:var(--bg-tertiary); }
-.stock-card.low { border-color:var(--error-bg); background:rgba(220,38,38,.06); }
+.stock-card.low { border-color:var(--error-bg); background:var(--color-error-bg); }
 .stock-card span, .recipe-card span, .recipe-card small { color:var(--text-secondary); font-size:11px; }
 .stock-card h3, .recipe-card h3 { margin:5px 0; font-size:14px; }
 .stock-card b { display:block; margin-top:12px; color:var(--accent-primary); font-size:20px; }
@@ -349,7 +349,7 @@ const styles = `
 .secondary, .primary, .danger, .icon-button { min-height:38px; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; }
 .secondary { border:1px solid var(--accent-border); background:var(--accent-light); color:var(--accent-primary); }
 .primary { border:0; background:var(--accent-primary); color:#fff; }
-.danger { border:1px solid rgba(220,38,38,.2); background:rgba(220,38,38,.08); color:var(--error-bg); }
+.danger { border:1px solid var(--color-error-border); background:var(--color-error-bg); color:var(--error-bg); }
 .icon-button { border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--error-bg); font-size:18px; }
 .recipe-card { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
 .recipe-preview { display:grid; gap:6px; padding:14px; border:1px solid var(--accent-border); border-radius:10px; background:var(--accent-light); color:var(--text-secondary); font-size:12px; }
@@ -381,7 +381,7 @@ const styles = `
 .cost-ingredient-row small { color:var(--text-secondary); font-size:11px; }
 .cost-ingredient-row input, .cost-ingredient-row select, .apply-price input { box-sizing:border-box; width:100%; min-height:44px; padding:9px 11px; border:1px solid var(--input-border); border-radius:8px; background:var(--input-bg); color:var(--input-text); font:inherit; }
 .cost-ingredient-row .secondary { min-height:40px; padding:8px 10px; }
-.cost-alert { margin-top:12px; padding:12px 14px; border:1px solid var(--warning-bg); border-left:4px solid var(--warning-bg); border-radius:8px; background:rgba(217,119,6,.08); color:var(--text-primary); font-size:12px; }
+.cost-alert { margin-top:12px; padding:12px 14px; border:1px solid var(--warning-bg); border-left:4px solid var(--warning-bg); border-radius:8px; background:var(--color-warning-bg); color:var(--text-primary); font-size:12px; }
 .cost-alert strong { display:block; margin-bottom:5px; color:var(--warning-bg); }
 .cost-alert div { margin-top:5px; }
 .cost-result { border-bottom:0; padding-bottom:0; }

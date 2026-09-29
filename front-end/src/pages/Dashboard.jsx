@@ -246,7 +246,7 @@ export default function Dashboard() {
   const aReceberMensal = Number(relatorioMes.pendente || 0);
 
   const imprimirRelatorioClientes = () => {
-    const clientes = relatorioClientes.clientes.map((cliente) => `<div class="cliente"><span>${cliente.nome}</span><span>${cliente.telefone || 'Nao informado'}</span></div>`).join('');
+    const clientes = relatorioClientes.clientes.map((cliente) => `<div class="cliente"><span>${cliente.nome}</span><span>${cliente.telefone || 'Não informado'}</span></div>`).join('');
     const janela = window.open('', '_blank', 'width=420,height=700');
     janela.document.write(`<!DOCTYPE html><html><head><title>Base de Clientes</title><style>*{box-sizing:border-box;font-family:'Courier New',monospace;font-size:12px}body{width:76mm;margin:0;padding:4mm;color:#000}.center{text-align:center}.marca{font-size:16px;font-weight:bold}.separador{border-top:1px dashed #000;margin:8px 0}.cabecalho,.cliente{display:grid;grid-template-columns:1fr 100px;gap:8px;padding:6px 0}.cabecalho{font-weight:bold;border-bottom:1px solid #000}.cliente{border-bottom:1px dashed #999}.cliente span:last-child{text-align:right}@media print{@page{margin:0;size:80mm auto}body{margin:4mm}}</style></head><body><div class="center marca">SABOR DE ABRACO</div><div class="center">BASE DE CLIENTES</div><div class="separador"></div><div class="cabecalho"><span>Nome</span><span>Telefone</span></div>${clientes || '<div>Nenhum cliente cadastrado</div>'}<div class="separador"></div><div class="center">Sabor de Abraço<br>Agradece a Preferência!<br>Volte sempre!</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},500)}</script></body></html>`);
     janela.document.close();
@@ -278,7 +278,7 @@ export default function Dashboard() {
 
   return <div className="dashboard-page">
       <AreaTabs area="dashboard" />
-    <div className="dashboard-heading page-heading"><div><span className="dashboard-eyebrow">GESTÃO DA CASA</span><h1>Dashboard</h1><p>Acompanhe o ritmo do Sabor de Abraço.</p></div><div className="dashboard-open">{data.comandasAbertas} comandas abertas</div></div>
+    <div className="dashboard-heading page-heading"><div><span className="dashboard-eyebrow">GESTÃO DA CASA</span><h1>Dashboard</h1><p>Acompanhe o ritmo da casa.</p></div><div className="dashboard-open">{data.comandasAbertas} comandas abertas</div></div>
     <DashboardTabs value={dashboardTab} onChange={setDashboardTab} />
     <section className="dashboard-fee-settings"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">CONFIGURAÇÃO DE PAGAMENTOS</span><h2>Taxas de cartão</h2><p>As taxas ficam definidas até serem alteradas.</p></div></div><div className="dashboard-fee-grid">{renderTaxaCartao('cartao_credito', 'Cartão de crédito')}{renderTaxaCartao('cartao_debito', 'Cartão de débito')}</div></section>
     <div className="dashboard-periods">{['dia', 'semana', 'mes'].map((periodo) => { const metric = data.periodos[periodo]; return <section className="dashboard-period" key={periodo}><div className="dashboard-period-title"><h2>{labels[periodo]}</h2><span>{metric.pedidos} pedidos</span></div><strong className="dashboard-total">{money(metric.total)}</strong><div className="dashboard-stats"><span><b>{quantidadeComDuasCasas(metric.itens)}</b> itens</span><span><b>{money(metric.ticketMedio)}</b> ticket médio</span></div><div className="dashboard-products"><h3>Mais pedidos</h3>{metric.maisVendidos.length ? metric.maisVendidos.map((product) => <div className="dashboard-product" key={product.nome}><span>{product.nome}</span><b>{product.quantidade}</b></div>) : <p>Nenhum pedido no período.</p>}</div></section>; })}</div>
@@ -388,9 +388,9 @@ export default function Dashboard() {
       .dashboard-comanda small { color:var(--text-secondary); font-size:11px; }
       .dashboard-comanda b { white-space:nowrap; }
       .dashboard-comanda-status { padding:4px 8px; border-radius:20px; background:var(--accent-light); color:var(--accent-primary) !important; font-size:10px !important; font-weight:800; }
-      .comanda-status-fechada { background:rgba(22,163,74,.12); color:var(--success-bg) !important; }
-      .comanda-status-cancelada { background:rgba(220,38,38,.12); color:var(--error-bg) !important; }
-      .dashboard-comanda-modal { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(20,14,10,.62); }
+      .comanda-status-fechada { background:var(--color-success-bg); color:var(--success-bg) !important; }
+      .comanda-status-cancelada { background:var(--color-error-bg); color:var(--error-bg) !important; }
+      .dashboard-comanda-modal { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(61, 47, 35, .55); }
       .dashboard-comanda-receipt { width:100%; max-width:390px; max-height:calc(100vh - 36px); overflow:auto; padding:24px 20px; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); box-shadow:var(--shadow-lg); font-family:'Courier New', monospace; }
       .dashboard-receipt-header { display:grid; gap:4px; padding-bottom:14px; border-bottom:1px dashed var(--border-color); text-align:center; }
       .dashboard-receipt-header::before { content:''; display:block; width:52px; height:52px; margin:0 auto 4px; background:url('/Abraco1.png') center/contain no-repeat; }
@@ -412,8 +412,8 @@ export default function Dashboard() {
       .dashboard-receipt-contact input { width:100%; box-sizing:border-box; min-height:38px; padding:8px 10px; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-tertiary); color:var(--text-primary); font-family:inherit; }
       .dashboard-receipt-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
       .dashboard-receipt-actions button { min-height:42px; border:0; border-radius:8px; color:#fff; font-weight:700; cursor:pointer; }
-      .dashboard-receipt-print { background:var(--brand-brown, #7c4b1e); }
-      .dashboard-receipt-whatsapp { background:#25d366; }
+      .dashboard-receipt-print { background:var(--color-primary); border-color:var(--color-primary); }
+      .dashboard-receipt-whatsapp { background:var(--color-success); border-color:var(--color-success); }
       .dashboard-comanda-modal .dashboard-toggle-button { width:100%; }
       .dashboard-stock { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
       .dashboard-customers, .dashboard-sales { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
@@ -494,8 +494,8 @@ export default function Dashboard() {
       .dashboard-order small { color:var(--text-secondary); font-size:11px; }
       .dashboard-order b { color:var(--accent-primary); white-space:nowrap; }
       .dashboard-order-status { padding:4px 8px; border-radius:20px; background:var(--accent-light); color:var(--accent-primary) !important; font-size:10px !important; font-weight:800; }
-      .status-pago { background:rgba(22,163,74,.12); color:var(--success-bg) !important; }
-      .status-cancelado { background:rgba(220,38,38,.12); color:var(--error-bg) !important; }
+      .status-pago { background:var(--color-success-bg); color:var(--success-bg) !important; }
+      .status-cancelado { background:var(--color-error-bg); color:var(--error-bg) !important; }
       .dashboard-empty-orders { margin:0; color:var(--text-secondary); font-size:13px; }
       .dashboard-loading { padding:40px; text-align:center; }
       @media (max-width:900px) { .dashboard-periods { grid-template-columns:1fr; } }

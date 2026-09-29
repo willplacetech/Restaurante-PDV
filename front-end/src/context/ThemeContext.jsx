@@ -1,35 +1,16 @@
-import { createContext, useState, useEffect } from 'react';
+import { useMemo } from 'react';
+import { ThemeContext } from './ThemeContextDefinition.jsx';
 
-export const ThemeContext = createContext();
-
+/**
+ * O sistema usa exclusivamente o tema claro.
+ * O contexto permanece para preservar o contrato de importacao,
+ * mas nao expoe alternancia de tema.
+ */
 export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => {
-    // Verifica preferência salva no localStorage
-    const saved = localStorage.getItem('theme');
-    if (saved) return saved === 'dark';
-    // Fallback para preferência do sistema
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
-  useEffect(() => {
-    // Salva preferência no localStorage
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    
-    // Aplica o tema ao elemento raiz
-    const html = document.documentElement;
-    if (isDark) {
-      html.setAttribute('data-theme', 'dark');
-      html.style.colorScheme = 'dark';
-    } else {
-      html.setAttribute('data-theme', 'light');
-      html.style.colorScheme = 'light';
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark(!isDark);
+  const value = useMemo(() => ({ isDark: false }), []);
 
   return (
-    <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

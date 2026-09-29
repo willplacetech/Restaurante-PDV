@@ -7,13 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['Abraco1.png', 'Abraco5.png', 'Abraco10.png', 'Abraco11.png', 'apple-touch-icon.png'],
+      includeAssets: ['logo.svg'],
       manifest: {
         name: 'Restaurante PDV',
         short_name: 'Restaurante',
         description: 'Sistema de PDV para restaurante',
-        theme_color: '#3a2015',
-        background_color: '#f8efe7',
+        theme_color: '#a0522d',
+        background_color: '#f7f3ec',
         start_url: '/',
         display: 'standalone',
         display_override: ['standalone'],
@@ -21,16 +21,16 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/Abraco1.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable'
+            src: '/logo.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any'
           },
           {
-            src: '/Abraco1.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
+            src: '/logo.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'maskable'
           }
         ]
       },

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
 import AreaTabs from '../components/AreaTabs.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 
 // 🎯 Máscaras
 const aplicarMascaraTelefone = (valor) => {
@@ -29,36 +30,43 @@ const aplicarMascaraData = (valor) => {
   return apenasNumeros.replace(/^(\d{2})(\d{2})(\d{0,4})/, '$1/$2/$3');
 };
 
-
+const formularioVazio = { nome: '', telefone: '', endereco: '', cpf: '', aniversario: '' };
 
 export default function Customers() {
   const [clientes, setClientes] = useState([]);
-  const [form, setForm] = useState({ nome: '', telefone: '', endereco: '', cpf: '', aniversario: '' });
+  const [form, setForm] = useState(formularioVazio);
   const [editing, setEditing] = useState(null);
+  const [carregando, setCarregando] = useState(true);
   const { showToast } = useToast();
 
-
   const carregar = async () => {
-    const res = await api.get('/customers');
-    setClientes(res.data);
+    try {
+      const res = await api.get('/customers');
+      setClientes(res.data || []);
+    } catch (error) {
+      console.error('Falha ao carregar clientes:', error);
+    } finally {
+      setCarregando(false);
+    }
   };
+
   useEffect(() => {
-    const carregarInicial = async () => { await carregar(); };
-    carregarInicial();
+    // O agendamento evita a renderizacao em cascata do primeiro carregamento.
+    const inicial = window.setTimeout(carregar, 0);
+    return () => window.clearTimeout(inicial);
   }, []);
 
   // 🔒 Verifica duplicidade de CPF
   const cpfJaExiste = (cpf, idEdicao = null) => {
     const cpfLimpo = String(cpf).replace(/\D/g, '');
-    return clientes.some(c => 
+    return clientes.some((c) =>
       String(c.cpf || '').replace(/\D/g, '') === cpfLimpo && c._id !== idEdicao
     );
   };
 
+  const submit = async (event) => {
+    event.preventDefault();
 
-  const submit = async (e) => {
-    e.preventDefault();
-    
     const telefoneLimpo = form.telefone.replace(/\D/g, '');
     const cpfLimpo = form.cpf.replace(/\D/g, '');
 
@@ -76,10 +84,6 @@ export default function Customers() {
     if (cpfLimpo && cpfJaExiste(cpfLimpo, editing?._id)) {
       return showToast('⚠️ Este CPF já está cadastrado!', 'warning');
     }
-    const telefoneJaExiste = clientes.some(c =>
-      String(c.telefone || '').replace(/\D/g, '') === telefoneLimpo && c._id !== editing?._id
-    );
-    if (telefoneJaExiste) return;
 
     const dadosParaEnviar = {
       nome: form.nome.trim(),
@@ -89,12 +93,12 @@ export default function Customers() {
     };
 
     try {
-      editing 
-        ? await api.put(`/customers/${editing._id}`, dadosParaEnviar) 
+      editing
+        ? await api.put(`/customers/${editing._id}`, dadosParaEnviar)
         : await api.post('/customers', dadosParaEnviar);
-      
+
       showToast(editing ? '✅ Cliente atualizado!' : '✅ Cliente cadastrado!', 'success');
-               setForm({ nome: '', telefone: '', endereco: '', cpf: '', aniversario: '' }); 
+      setForm(formularioVazio);
       setEditing(null);
       carregar();
     } catch {
@@ -102,19 +106,17 @@ export default function Customers() {
     }
   };
 
-
-  const alterar = (c) => {
-    setEditing(c);
-    setForm({ 
-      nome: c.nome, 
-      telefone: aplicarMascaraTelefone(c.telefone || ''), 
-      endereco: c.endereco || '',
-      aniversario: aplicarMascaraData(c.aniversario || ''),
-      cpf: aplicarMascaraCPF(c.cpf || '') 
+  const alterar = (cliente) => {
+    setEditing(cliente);
+    setForm({
+      nome: cliente.nome,
+      telefone: aplicarMascaraTelefone(cliente.telefone || ''),
+      endereco: cliente.endereco || '',
+      aniversario: aplicarMascaraData(cliente.aniversario || ''),
+      cpf: aplicarMascaraCPF(cliente.cpf || ''),
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
 
   const remover = async (id) => {
     if (!window.confirm('Excluir este cliente?')) return;
@@ -127,172 +129,153 @@ export default function Customers() {
     }
   };
 
-
-  const handleTelefoneChange = (e) => {
-    const valor = e.target.value.replace(/\D/g, '').slice(0, 11);
+  const handleTelefoneChange = (event) => {
+    const valor = event.target.value.replace(/\D/g, '').slice(0, 11);
     setForm({ ...form, telefone: aplicarMascaraTelefone(valor) });
   };
 
-  const handleCpfChange = (e) => {
-    const valor = e.target.value.replace(/\D/g, '').slice(0, 11);
+  const handleCpfChange = (event) => {
+    const valor = event.target.value.replace(/\D/g, '').slice(0, 11);
     setForm({ ...form, cpf: aplicarMascaraCPF(valor) });
   };
 
-
   return (
-    <div>
+    <div className="page">
       <AreaTabs area="pessoas" />
-      <div className="page-heading">
+
+      <header className="page-heading">
         <div>
-          <h1>👤 Cadastro de Clientes</h1>
-          <p>Gerencie sua base de clientes</p>
+          <h1>Clientes</h1>
+          <p>Gerencie sua base de clientes.</p>
         </div>
-      </div>
+      </header>
 
+      <section className="card" aria-labelledby="cliente-form-titulo">
+        <div className="card__header">
+          <h2 className="card-title" id="cliente-form-titulo">
+            {editing ? 'Editar cliente' : 'Novo cliente'}
+          </h2>
+        </div>
 
-      <div style={{
-        background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-        borderRadius: 16, padding: 16, marginBottom: 16
-      }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px', color: 'var(--text-primary)' }}>
-          {editing ? '✏️ Editar Cliente' : '➕ Novo Cliente'}
-        </h3>
         <form onSubmit={submit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }} className="form-grid-cli">
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, display: 'block' }}>
-                Nome * <span style={{ color: 'var(--error-bg)', fontSize: 10 }}>(obrigatório)</span>
-              </label>
-              <input 
-                placeholder="Nome completo" 
-                value={form.nome} 
+          <div className="form-grid">
+            <label className="field">
+              <span className="label">Nome *</span>
+              <input
+                id="cliente-nome"
+                placeholder="Nome completo"
+                value={form.nome}
                 required
-                onChange={e => setForm({ ...form, nome: e.target.value })}
-                style={inputStyle} 
+                onChange={(event) => setForm({ ...form, nome: event.target.value })}
               />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, display: 'block' }}>
-                Telefone * <span style={{ color: 'var(--error-bg)', fontSize: 10 }}>(obrigatório)</span>
-              </label>
-              <input 
-                placeholder="(11) 99999-9999" 
+            </label>
+
+            <label className="field">
+              <span className="label">Telefone *</span>
+              <input
+                placeholder="(11) 99999-9999"
                 value={form.telefone}
                 onChange={handleTelefoneChange}
-                style={inputStyle} 
+                inputMode="numeric"
                 required
               />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, display: 'block' }}>
-                CPF <span style={{ color: 'var(--text-secondary)', fontSize: 10 }}>(opcional/único)</span>
-              </label>
-              <input 
-                placeholder="000.000.000-00" 
+            </label>
+
+            <label className="field">
+              <span className="label">CPF <small>(opcional, único)</small></span>
+              <input
+                placeholder="000.000.000-00"
                 value={form.cpf}
                 onChange={handleCpfChange}
-                style={inputStyle} 
+                inputMode="numeric"
               />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, display: 'block' }}>
-                Aniversário <span style={{ color: 'var(--text-secondary)', fontSize: 10 }}>(opcional)</span>
-              </label>
-              <input 
-                placeholder="DD/MM/AAAA" 
+            </label>
+
+            <label className="field">
+              <span className="label">Aniversário <small>(opcional)</small></span>
+              <input
+                placeholder="DD/MM/AAAA"
                 value={form.aniversario}
-                onChange={e => setForm({ ...form, aniversario: aplicarMascaraData(e.target.value) })}
-                style={inputStyle} 
+                onChange={(event) => setForm({ ...form, aniversario: aplicarMascaraData(event.target.value) })}
+                inputMode="numeric"
               />
-            </div>
+            </label>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <button type="submit" style={{
-              flex: 1, padding: '12px', background: 'var(--accent-primary)', color: '#fff',
-              border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700,
-              cursor: 'pointer', minHeight: 46
-            }}>{editing ? 'Atualizar' : 'Cadastrar'}</button>
-            {editing && <button type="button" onClick={() => { 
-              setEditing(null); 
-      setForm({ nome: '', telefone: '', endereco: '', cpf: '', aniversario: '' });
-            }} style={{
-              padding: '12px 20px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
-              border: '1.5px solid var(--border-color)', borderRadius: 10,
-              fontSize: 14, fontWeight: 600, cursor: 'pointer', minHeight: 46
-            }}>Cancelar</button>}
+
+          <div className="btn-row btn-row--stretch">
+            <button type="submit" className="btn-primary">
+              {editing ? 'Atualizar cliente' : 'Cadastrar cliente'}
+            </button>
+            {editing && (
+              <button type="button" className="btn-secondary" onClick={() => { setEditing(null); setForm(formularioVazio); }}>
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
-      </div>
+      </section>
 
-
-      <div style={{
-        background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-        borderRadius: 16, padding: 16
-      }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          Cadastrados
-          <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success-bg)', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-            {clientes.length}
-          </span>
-        </h3>
-        <div style={{ overflowX: 'auto', margin: '0 -16px', padding: '0 16px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                {['Nome', 'Telefone', 'CPF', 'Aniv.', 'Ações'].map(h => (
-                  <th key={h} style={{ padding: '10px 8px', textAlign: 'left', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clientes.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)', fontSize: 13 }}>Nenhum cliente cadastrado</td></tr>
-              ) : clientes.map(c => (
-                <tr key={c._id} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                  <td style={{ padding: '10px 8px', fontWeight: 600, fontSize: 13 }}>{c.nome}</td>
-                  <td style={{ padding: '10px 8px', fontSize: 13, fontFamily: 'monospace' }}>
-                    {aplicarMascaraTelefone(c.telefone) || '-'}
-                  </td>
-                  <td style={{ padding: '10px 8px', fontSize: 13, fontFamily: 'monospace' }}>
-                    {aplicarMascaraCPF(c.cpf) || '-'}
-                  </td>
-                   <td style={{ padding: '10px 8px', fontSize: 13, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
-                     {c.aniversario || '-'}
-                   </td>
-                  <td style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => alterar(c)} style={btnTable}>Editar</button>
-                    <button onClick={() => remover(c._id)} style={{ ...btnTable, background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error-bg)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>Excluir</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className="card" aria-labelledby="clientes-lista-titulo">
+        <div className="card__header">
+          <h2 className="card-title" id="clientes-lista-titulo">Cadastrados</h2>
+          <span className="badge badge--neutral">{clientes.length}</span>
         </div>
-      </div>
 
-
-      <style>{`
-        @media (min-width: 640px) {
-          .form-grid-cli { grid-template-columns: 1fr 1fr !important; }
-        }
-        @media (min-width: 1024px) {
-          .form-grid-cli { grid-template-columns: 2fr 1fr 1fr 2fr !important; }
-        }
-      `}</style>
+        {carregando ? (
+          <div className="state" role="status" aria-live="polite">
+            <span className="state__text">Carregando clientes...</span>
+          </div>
+        ) : clientes.length === 0 ? (
+          <EmptyState
+            icon="👥"
+            title="Nenhum cliente cadastrado"
+            description="Cadastre clientes para identificar vendas e enviar comprovantes pelo WhatsApp."
+          >
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => document.getElementById('cliente-nome')?.focus()}
+            >
+              Cadastrar cliente
+            </button>
+          </EmptyState>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <caption className="visually-hidden">Lista de clientes cadastrados</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Nome</th>
+                  <th scope="col">Telefone</th>
+                  <th scope="col">CPF</th>
+                  <th scope="col">Aniversário</th>
+                  <th scope="col" className="num">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientes.map((cliente) => (
+                  <tr key={cliente._id}>
+                    <td style={{ fontWeight: 600 }}>{cliente.nome}</td>
+                    <td className="num">{aplicarMascaraTelefone(cliente.telefone) || '—'}</td>
+                    <td className="num">{aplicarMascaraCPF(cliente.cpf) || '—'}</td>
+                    <td className="num">{cliente.aniversario || '—'}</td>
+                    <td className="num">
+                      <div className="btn-row">
+                        <button type="button" className="btn-secondary" onClick={() => alterar(cliente)}>
+                          Editar<span className="visually-hidden"> {cliente.nome}</span>
+                        </button>
+                        <button type="button" className="btn-danger" onClick={() => remover(cliente._id)}>
+                          Excluir<span className="visually-hidden"> {cliente.nome}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
-
-
-const inputStyle = {
-  width: '100%', padding: '12px 14px', border: '1.5px solid var(--border-color)',
-  borderRadius: 10, fontSize: 16, boxSizing: 'border-box',
-  outline: 'none', background: 'var(--input-bg)', color: 'var(--input-text)', minHeight: 48
-};
-
-
-const btnTable = {
-  padding: '6px 12px', margin: '0 3px', background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 12,
-  fontWeight: 600, cursor: 'pointer', minHeight: 34
-};
