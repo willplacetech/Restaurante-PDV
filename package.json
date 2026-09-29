@@ -1,8 +1,8 @@
 {
-  "name": "sabor-de-abraço-pdv",
+  "name": "restaurante-pdv",
   "version": "1.0.0",
   "private": true,
-  "description": "Sabor de Abraço - Sistema de PDV (MERN)",
+  "description": "Sistema de PDV para Restaurante (MERN)",
   "scripts": {
     "dev:backend": "cd back-end && nodemon server.js",
     "dev:frontend": "cd front-end && vite",

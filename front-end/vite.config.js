@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['Abraco1.png', 'Abraco5.png', 'Abraco10.png', 'Abraco11.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Sabor de Abraço',
-        short_name: 'Mercado',
-        description: 'Cafeteria e sistema de atendimento do Sabor de Abraço',
+        name: 'Restaurante PDV',
+        short_name: 'Restaurante',
+        description: 'Sistema de PDV para restaurante',
         theme_color: '#3a2015',
         background_color: '#f8efe7',
         start_url: '/',
