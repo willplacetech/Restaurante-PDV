@@ -14,5 +14,9 @@
     "test:frontend:open": "cd front-end && cypress open",
     "test:all": "npm run test && npm run test:frontend",
     "lint": "cd front-end && npx eslint src"
+  },
+  "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3"
   }
 }
