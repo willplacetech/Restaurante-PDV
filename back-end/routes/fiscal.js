@@ -1,3 +1,11 @@
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const Order = require('../models/Order');
+const Product = require('../models/Product');
+const auth = require('../middleware/auth');
+const { emitirNfce, NfceProviderError } = require('../utils/nfce');
+
 router.post('/orders/:id/emitir-nfce', auth, auth.allowRoles('admin', 'operador'), async (req, res) => {
   const order = await Order.findById(req.params.id);
   if (!order) return res.status(404).json({ msg: 'Pedido não encontrado' });
@@ -79,3 +87,5 @@ router.post('/orders/:id/emitir-nfce', auth, auth.allowRoles('admin', 'operador'
     });
   }
 });
+
+module.exports = router;
