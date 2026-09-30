@@ -19,7 +19,9 @@ export default function DashboardInsights({ insights }) {
       <article><small>Clientes recorrentes</small><strong>{percent(fidelidade.taxaRecorrencia)}</strong><span>{fidelidade.clientesRecorrentes || 0} de {fidelidade.clientesComCompra || 0} clientes</span></article>
     </div>
     <div className="insight-columns">
+      {/* ── Vendas por horário — DESATIVADO: cliente só abre para almoço ──
       <article className="insight-panel"><h3>Vendas por horário</h3><p className="insight-help">Use o pico para definir a escala da equipe.</p>{horarios.length ? horarios.map((item) => <div className="insight-row" key={item.hora}><span>{String(item.hora).padStart(2, '0')}h</span><div className="insight-bar"><i style={{ width: `${Math.min(100, (item.total / Math.max(1, horarioPico.total)) * 100)}%` }} /></div><b>{item.pedidos}</b></div>) : <p>Sem vendas no período.</p>}</article>
+      */}
       <article className="insight-panel"><h3>Curva ABC</h3><p className="insight-help">Priorize os produtos que concentram receita e volume.</p>{topABC.length ? topABC.map((item) => {
         const total = Number(item.quantidade || 0);
         const diaria = total / 90;
