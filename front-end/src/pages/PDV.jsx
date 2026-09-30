@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useFilaOffline } from '../hooks/useFilaOffline';
+import { useToast } from '../components/Toast.jsx';
 
 const formatMoney = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+
+const generateIdTemporario = () => `tmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const formasPagamento = [
   { tipo: 'pix', rotulo: 'Pix', icone: '⚡' },
@@ -12,6 +16,8 @@ const formasPagamento = [
 
 export default function PDV() {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const { addToQueue, isOnline } = useFilaOffline();
   const [produtos, setProdutos] = useState([]);
   const [itens, setItens] = useState([]);
   const [cliente, setCliente] = useState('');
@@ -47,12 +53,6 @@ export default function PDV() {
   const tentarNovamente = () => {
     setCarregandoProdutos(true);
     buscarProdutos();
-  };
-
-  const aviso = (texto, tipo = 'success') => {
-    setMsg(texto);
-    setMsgTipo(tipo);
-    window.setTimeout(() => setMsg(''), 3500);
   };
 
   const adicionarItem = (produto) => {
@@ -95,22 +95,44 @@ export default function PDV() {
     setLoading(true);
     setMsg('');
     try {
-      await api.post('/orders', {
+      const vendaData = {
         itens,
         clienteNome: cliente || undefined,
         observacao,
         atendente: user?.username || 'Operador',
         tipoAtendimento: 'balcao',
-        pagamentos: [{ tipo: formaPagamento, valorRecebido: total, quitado: true }],
-      });
-      aviso('Pedido finalizado com sucesso!');
+        formaPagamento,
+        valorRecebido: total,
+        total: total,
+      };
+
+      if (!isOnline) {
+        const idTemporario = addToQueue(vendaData);
+        showToast(`✅ Sem internet — venda salva! (${idTemporario}) Envia automaticamente quando voltar.`, 'success');
+        setItens([]);
+        setCliente('');
+        setObservacao('');
+        return;
+      }
+
+      const idTemporario = generateIdTemporario();
+      const res = await api.post('/vendas', { ...vendaData, idTemporario });
+      if (res.data.duplicata) {
+        showToast('Venda já processada (duplicata evitada)', 'warning');
+      } else {
+        showToast('Pedido finalizado com sucesso!');
+      }
       setItens([]);
       setCliente('');
       setObservacao('');
     } catch (e) {
       console.error(e);
-      setMsg('Erro ao finalizar pedido.');
-      setMsgTipo('error');
+      if (e.response?.status === 409) {
+        showToast('Venda já processada (duplicata evitada)', 'warning');
+      } else {
+        setMsg('Erro ao finalizar pedido.');
+        setMsgTipo('error');
+      }
     } finally {
       setLoading(false);
     }

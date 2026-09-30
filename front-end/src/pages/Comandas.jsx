@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { buildNotaVendaHtml, compartilharNotaWhatsApp } from '../utils/notaVenda.js';
@@ -117,6 +118,7 @@ Obrigado pela preferência! 🙏`
 // ─── componente principal ─────────────────────────────────────────────────────
 
 export default function Comandas() {
+  const navigate = useNavigate();
   const [comandas, setComandas] = useState([]);
   const [products, setProducts] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -260,15 +262,7 @@ export default function Comandas() {
   const abrirModalFechamento = () => {
     if (!selected) return;
     if (!selected.itens.length) { showToast('A comanda não tem itens', 'warning'); return; }
-    setDiscount('0');
-    setPaymentMethod('');
-    setPaymentPartial(false);
-    setPartialAmount('');
-    setUtilizacaoInterna(false);
-    setPaymentError(false);
-    setTelefoneModal('');
-    setNomeModal(selected.clienteNome || '');
-    setModalFechamento(true);
+    navigate(`/fechamento/${selected._id}`);
   };
 
   const confirmarFechamento = async () => {

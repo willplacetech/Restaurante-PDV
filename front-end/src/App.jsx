@@ -19,6 +19,7 @@ import Purchases from './pages/Purchases.jsx';
 import Kitchen from './pages/Kitchen.jsx';
 import Financeiro from './pages/Financeiro.jsx';
 import Caixa from './pages/Caixa.jsx';
+import TelaFechamento from './pages/TelaFechamento.jsx';
 
 
 export default function App() {
@@ -32,8 +33,9 @@ export default function App() {
               <Route element={<PrivateRoute />}>
                 <Route element={<Layout />}>
                   <Route path="/pdv" element={<PDV />} />
-                  <Route path="/atendimento/mesas" element={<Comandas />} />
-                  <Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
+<Route path="/atendimento/mesas" element={<Comandas />} />
+<Route path="/fechamento/:id" element={<TelaFechamento />} />
+<Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
                   <Route path="/cadastro/mesas" element={<MesasCadastro />} />
                   <Route element={<RoleRoute roles={['admin', 'operador', 'cozinha']} />}>
                     <Route path="/cozinha" element={<Kitchen />} />

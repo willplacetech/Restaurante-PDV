@@ -50,7 +50,7 @@ export default function PagamentoResultadoModal({
         ...prev,
         linkDanfe: url,
         qrCode: qrContainer.innerHTML,
-      ));
+      }));
     }
   }, [nfceData]);
 
