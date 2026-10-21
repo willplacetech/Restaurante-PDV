@@ -20,6 +20,10 @@ import Kitchen from './pages/Kitchen.jsx';
 import Financeiro from './pages/Financeiro.jsx';
 import Caixa from './pages/Caixa.jsx';
 import TelaFechamento from './pages/TelaFechamento.jsx';
+import Auditoria from './pages/Auditoria.jsx';
+import Configuracoes from './pages/Configuracoes.jsx';
+import PaymentSettings from './pages/PaymentSettings.jsx';
+import Impressoras from './pages/Impressoras.jsx';
 
 
 export default function App() {
@@ -45,12 +49,17 @@ export default function App() {
                     <Route path="/clientes" element={<Customers />} />
                     <Route path="/pedidos" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/contas-receber" element={<ContasReceber />} />
+                    <Route path="/auditoria" element={<Auditoria />} />
                     <Route path="/usuarios" element={<Users />} />
+                    <Route path="/configuracoes" element={<Configuracoes />} />
+                    <Route path="/payment-settings" element={<PaymentSettings />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/producao" element={<Production />} />
                     <Route path="/compras" element={<Purchases />} />
                     <Route path="/financeiro" element={<Financeiro />} />
                     <Route path="/caixa" element={<Caixa />} />
+                    <Route path="/payment-settings" element={<PaymentSettings />} />
+                    <Route path="/impressoras" element={<Impressoras />} />
                   </Route>
                   <Route element={<RoleRoute roles={['admin', 'cozinha']} />}>
                     <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />

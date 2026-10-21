@@ -97,6 +97,14 @@ app.use('/api/compras', require('./routes/purchases'));
 app.use('/api/receitas', require('./routes/receitas'));
 app.use('/api/produtos', require('./routes/products'));
 
+// Rotas adicionadas da migração PDV-Cafe
+app.use('/api/contas-receber', require('./routes/contas-receber'));
+app.use('/api/estoque', require('./routes/estoque'));
+app.use('/api/mesas', require('./routes/mesas'));
+app.use('/api/payment-settings', require('./routes/payment-settings'));
+app.use('/api/configuracoes', require('./routes/configuracoes'));
+app.use('/api/auditoria', require('./routes/auditoria'));
+
 // Rota base da API
 app.get('/api', (req, res) => {
   res.json({
