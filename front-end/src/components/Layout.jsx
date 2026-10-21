@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext.jsx';
+import Version from '../components/Version.jsx';
 
 const gruposMenu = [
   {
@@ -270,6 +271,7 @@ const visibleGroups = () => {
             <span className="user-chip__avatar" aria-hidden="true">{user?.username?.[0]?.toUpperCase() || '?'}</span>
             <span className="user-chip__name truncate">{user?.username || 'Usuário'}</span>
           </span>
+          <Version />
           <button type="button" className="btn-secondary btn-logout-compact" onClick={() => setShowConfirm(true)}>
             Sair
           </button>

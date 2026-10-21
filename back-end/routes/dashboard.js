@@ -188,6 +188,36 @@ router.get('/historico-produtos', async (req, res) => {
   } catch (error) { res.status(500).json({ msg: error.message }); }
 });
 
+router.get('/urgencias', async (req, res) => {
+  try {
+    const hoje = new Date();
+    const inicioHoje = new Date(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}T00:00:00-03:00`);
+    const fimHoje = new Date(inicioHoje.getTime() + 24 * 60 * 60 * 1000);
+
+    const pedidosHoje = await Order.find({ createdAt: { $gte: inicioHoje, $lt: fimHoje }, status: { $ne: 'cancelado' }, utilizacaoInterna: { $ne: true } }).select('total itens status clienteNome createdAt');
+    const totalVendas = pedidosHoje.reduce((sum, p) => sum + Number(p.total || 0), 0);
+    const totalItens = pedidosHoje.reduce((sum, p) => sum + (p.itens || []).reduce((s, i) => s + Number(i.quantidade || 0), 0), 0);
+    const pendentes = pedidosHoje.filter((p) => p.status !== 'pago' && !p.utilizacaoInterna).length;
+    const abertas = pedidosHoje.filter((p) => p.status === 'aberta').length;
+
+    const comandasAbertas = await Comanda.countDocuments({ status: 'aberta' });
+    const clientesCadastrados = await Customer.countDocuments();
+
+    res.json({
+      urgencias: {
+        pedidosHoje: pedidosHoje.length,
+        totalVendas: totalVendas,
+        totalItens: totalItens,
+        pendentes,
+        abertas,
+        comandasAbertas,
+        clientesCadastrados,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) { res.status(500).json({ msg: error.message }); }
+});
+
 router.get('/', async (req, res) => {
   try {
     const periodos = ['dia', 'semana', 'mes'];

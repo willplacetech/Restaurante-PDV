@@ -139,4 +139,34 @@ router.get('/', auth, auth.allowRoles('admin', 'operador'), async (req, res) => 
   }
 });
 
+// GET /api/vendas/export - exporta vendas para CSV
+router.get('/export', auth, auth.allowRoles('admin', 'gerente', 'operador'), async (req, res) => {
+  try {
+    const { inicio, fim, clienteId } = req.query;
+    const filter = { status: 'pago' };
+    if (clienteId) filter.clienteId = clienteId;
+    if (inicio && fim) filter.createdAt = { $gte: new Date(inicio), $lte: new Date(new Date(fim).setHours(23, 59, 59)) };
+    const fields = ['_id', 'clienteNome', 'clienteTelefone', 'atendente', 'tipoAtendimento', 'subtotal', 'desconto', 'total', 'status', 'createdAt'];
+    const vendas = await Order.find(filter).sort({ createdAt: -1 }).lean().select(fields.join(' '));
+    const headers = ['ID', 'Cliente', 'Telefone', 'Atendente', 'Tipo', 'Subtotal', 'Desconto', 'Total', 'Status', 'Data'];
+    const rows = vendas.map((v) => ({
+      'ID': v._id?.toString().slice(0, 8) || '',
+      'Cliente': v.clienteNome || '',
+      'Telefone': v.clienteTelefone || '',
+      'Atendente': v.atendente || '',
+      'Tipo': v.tipoAtendimento || '',
+      'Subtotal': v.subtotal ? Number(v.subtotal).toFixed(2) : '0,00',
+      'Desconto': v.desconto ? Number(v.desconto).toFixed(2) : '0,00',
+      'Total': v.total ? Number(v.total).toFixed(2) : '0,00',
+      'Status': v.status || '',
+      'Data': v.createdAt ? new Date(v.createdAt).toLocaleDateString('pt-BR') : '',
+    }));
+    const csv = exportToCSV(headers, rows);
+    downloadCSV(csv, `vendas-${new Date().toLocaleDateString('pt-BR')}.csv`);
+    res.json({ msg: 'CSV gerado com sucesso', rowsCount: rows.length });
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 module.exports = router;

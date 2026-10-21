@@ -116,6 +116,7 @@ export default function Dashboard() {
   const pedidosHoje = data.pedidosHoje || [];
   const vendasHoje = data.vendasHoje || { pedidos: 0, itens: 0, total: 0, recebido: 0, pendente: 0 };
   const relatorioMes = data.relatorioMes || { pedidos: 0, vendas: 0, itens: 0, total: 0, recebido: 0, pendente: 0, ticketMedio: 0, status: {}, pagamentos: [], produtos: [], clientes: 0, vendasPorDia: [] };
+  const periodos = data.periodos || { dia: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 }, semana: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 }, mes: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 } };
   const relatorioClientes = data.relatorioClientes || { periodo: '', totalCadastrados: 0, clientesComCompra: 0, totalVendido: 0, totalRecebido: 0, totalPendente: 0, clientes: [] };
   const insights = data.insights || {};
   const estoque = [...produtos].sort((a, b) => Number(a.estoque || 0) - Number(b.estoque || 0));

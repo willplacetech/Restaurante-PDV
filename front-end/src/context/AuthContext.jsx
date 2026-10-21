@@ -25,8 +25,18 @@ export const AuthProvider = ({ children }) => {
     location.reload();
   };
 
+  const hasRole = (role) => !user || user.role === role;
+  const canAccessMenu = (requiredRole) => {
+    const roleMap = {
+      atendente: ['atendente', 'gerente', 'admin'],
+      gerente: ['gerente', 'admin'],
+      admin: ['admin'],
+    };
+    return (roleMap[requiredRole] || []).includes(user?.role);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasRole, canAccessMenu }}>
       {children}
     </AuthContext.Provider>
   );

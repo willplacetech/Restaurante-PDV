@@ -84,31 +84,32 @@ export default function App() {
                         <Route path="/fechamento/:id" element={<TelaFechamento />} />
                         <Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
                         <Route path="/cadastro/mesas" element={<MesasCadastro />} />
-                        <Route element={<RoleRoute roles={['admin', 'operador', 'cozinha']} />}>
+                        <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin']} />}>
                           <Route path="/cozinha" element={<Kitchen />} />
                         </Route>
-                        <Route element={<RoleRoute roles={['admin']} />}>
+                        <Route element={<RoleRoute roles={['admin', 'gerente']} />}>
                           <Route path="/produtos" element={<Products />} />
                           <Route path="/clientes" element={<Customers />} />
                           <Route path="/pedidos" element={<Navigate to="/dashboard" replace />} />
                           <Route path="/contas-receber" element={<ContasReceber />} />
-                          <Route path="/auditoria" element={<Auditoria />} />
-                          <Route path="/usuarios" element={<Users />} />
-                          <Route path="/configuracoes" element={<Configuracoes />} />
                           <Route path="/dashboard" element={<Dashboard />} />
                           <Route path="/producao" element={<Production />} />
                           <Route path="/compras" element={<Purchases />} />
                           <Route path="/financeiro" element={<Financeiro />} />
                           <Route path="/caixa" element={<Caixa />} />
-                          <Route path="/payment-settings" element={<PaymentSettings />} />
                           <Route path="/impressoras" element={<Impressoras />} />
                         </Route>
-                        <Route element={<RoleRoute roles={['admin', 'cozinha']} />}>
+                        <Route element={<RoleRoute roles={['gerente', 'admin']} />}>
                           <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/pdv" />} />
                       </Route>
                     </Route>
+                    <Route element={<RoleRoute roles={['admin']} />}>
+                      <Route path="/auditoria" element={<Auditoria />} />
+                      <Route path="/usuarios" element={<Users />} />
+                      <Route path="/payment-settings" element={<PaymentSettings />} />
+                      <Route path="/configuracoes" element={<Configuracoes />} />
                   </Routes>
                 </ErrorBoundary>
               </Router>

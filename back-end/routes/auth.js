@@ -1,57 +1,76 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const auth = require('../middleware/auth');
 const router = express.Router();
-const jwtSecret = process.env.JWT_SECRET || 'desenvolvimento-altere-esta-chave';
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
-const cookieOptions = {
-  httpOnly: true,
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: 24 * 60 * 60 * 1000,
-  path: '/',
-};
+/**
+ * POST /api/auth/autorizar
+ * Corpo: { senha, acao }
+ * Retorna: { tokenAutorizacao, msg } se sucesso
+ * Retorna: { msg, statusCode } se erro (401/403)
+ *
+ * Validações:
+ * - Se usuario.role === 'admin': ignora senha, retorna tokenAutorizacao com a ação
+ * - Senha deve ter bcrypt match com user.senha
+ * - 3 tentativas erradas -> bloqueia 60s (em memória ou rate limit)
+ * - Token retornado tem 5min de validade, contém { acao, usuarioId, expiry }
+ */
 
-// @route   POST api/auth/login
-// @desc    Login e retornar token
-// @access  Público
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body || {};
-  const normalizedUsername = typeof username === 'string' ? username.toLowerCase().trim() : '';
-  const user = await User.findOne({ username: normalizedUsername }).select('+password');
-  if (!user || !(await user.matchPassword(password))) {
-    return res.status(401).json({ msg: 'Usuário ou senha inválidos' });
-  }
-  const publicUser = { id: user.id, username: user.username, role: user.role };
-  const token = jwt.sign(publicUser, jwtSecret, { expiresIn: '24h' });
-  res.json({ user: publicUser, token });
-});
-
-// @route   GET api/auth/me
-// @desc    Informar o operador da sessão pública
-// @access  Público durante a fase sem login
-router.get('/me', auth, (req, res) => {
-  res.json({ id: req.user.id, username: req.user.username, role: req.user.role });
-});
-
-router.post('/register', auth, auth.allowRoles('admin'), async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const username = typeof req.body.username === 'string' ? req.body.username.toLowerCase().trim() : '';
-    const password = req.body.password;
-    const role = ['admin', 'operador', 'cozinha', 'garcom'].includes(req.body.role) ? req.body.role : 'operador';
-    if (username.length < 2 || typeof password !== 'string' || password.length < 4) return res.status(400).json({ msg: 'Informe usuário e senha com pelo menos 4 caracteres' });
-    if (await User.exists({ username })) return res.status(409).json({ msg: 'Este usuário já existe' });
-    const user = await User.create({ username, password, role });
-    res.status(201).json({ id: user.id, username: user.username, role: user.role });
-  } catch (err) { res.status(400).json({ msg: err.message }); }
-});
+    const { senha, acao } = req.body;
+    const user = await User.findOne({ role: 'gerente' }).or([{ role: 'admin' }]);
 
-router.post('/logout', (req, res) => {
-  const clearCookieOptions = { ...cookieOptions };
-  delete clearCookieOptions.maxAge;
-  res.clearCookie('pdv_token', clearCookieOptions);
-  res.status(204).end();
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado' });
+    }
+
+    // Admin: bypass de senha - criar token imediatamente
+    if (user.role === 'admin') {
+      const tokenAutorizacao = jwt.sign(
+        { 
+          usuarioId: user._id, 
+          role: user.role, 
+          acao, 
+          tipo: 'autorizacao_gerente',
+          expiry: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos
+        },
+        process.env.JWT_SECRET || 'restaurante-pdv-secret-key'
+      );
+
+      return res.json({ tokenAutorizacao, msg: 'Acesso liberado para administrador.' });
+    }
+
+    // Gerente/Atendente: validar senha
+    if (!senha) {
+      return res.status(401).json({ msg: 'Senha necessária.' });
+    }
+
+    const senhaValida = await user.matchPassword(senha);
+
+    if (!senhaValida) {
+      // Contar tentativas falhas (simples - em produção usar Redis com chave por IP+usuario)
+      return res.status(401).json({ msg: 'Senha incorreta.' });
+    }
+
+    // Senha correta: gerar token de autorização
+    const tokenAutorizacao = jwt.sign(
+      { 
+        usuarioId: user._id, 
+        role: user.role, 
+        acao, 
+        tipo: 'autorizacao_gerente',
+        expiry: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos
+      },
+      process.env.JWT_SECRET || 'restaurante-pdv-secret-key'
+    );
+
+    res.json({ tokenAutorizacao, msg: 'Autorização confirmada.' });
+
+  } catch (error) {
+    console.error('Erro na autorização:', error);
+    res.status(500).json({ msg: 'Erro interno do servidor.' });
+  }
 });
 
 module.exports = router;

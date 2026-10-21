@@ -14,10 +14,8 @@ const app = express();
 // CORS — CONFIGURAÇÃO CORRIGIDA
 // ============================================================
 const allowedOrigins = [
-  'https://restaurante-pdv.onrender.com',   // ← origem fixa (garantia)
-  'http://localhost:5173',
-  'http://localhost:3000',
-  ...(process.env.FRONTEND_URL || '').split(','),
+  'https://restaurante-pdv.onrender.com',
+  ...(process.env.FRONTEND_URL || '').split(',').map((origin) => origin.trim()).filter(Boolean),
 ]
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
@@ -104,6 +102,7 @@ app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/payment-settings', require('./routes/payment-settings'));
 app.use('/api/configuracoes', require('./routes/configuracoes'));
 app.use('/api/delivery', require('./routes/delivery'));
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/auditoria', require('./routes/auditoria'));
 
 // Rota base da API
@@ -118,9 +117,15 @@ app.get('/api', (req, res) => {
       customers: '/api/customers',
       orders: '/api/orders',
       comandas: '/api/comandas',
-      fiscal: '/api/fiscal'
+      fiscal: '/api/fiscal',
+      health: '/api/health'
     }
   });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // ============================================================
