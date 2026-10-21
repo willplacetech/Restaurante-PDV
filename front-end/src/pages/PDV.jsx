@@ -3,6 +3,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useFilaOffline } from '../hooks/useFilaOffline';
 import { useToast } from '../components/Toast.jsx';
+import useTecladoAtalhos from '../hooks/useTecladoAtalhos';
 
 const formatMoney = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
@@ -18,6 +19,7 @@ export default function PDV() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { addToQueue, isOnline } = useFilaOffline();
+  const { onNovaVenda, onFocarBusca, onConfirmar } = useTecladoAtalhos();
   const [produtos, setProdutos] = useState([]);
   const [itens, setItens] = useState([]);
   const [cliente, setCliente] = useState('');

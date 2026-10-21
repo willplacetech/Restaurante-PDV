@@ -119,7 +119,13 @@ export default function Layout() {
   const sair = () => { logout(); navigate('/login'); };
 
   const toggleGrupo = (chave) => {
-    setGruposAbertos((prev) => ({ ...prev, [chave]: !prev[chave] }));
+    setGruposAbertos((prev) => {
+      const novoEstado = { ...prev, [chave]: !prev[chave] };
+      Object.keys(prev).forEach((k) => {
+        if (k !== chave) novoEstado[k] = false;
+      });
+      return novoEstado;
+    });
   };
 
   const pathAtivo = location.pathname;
