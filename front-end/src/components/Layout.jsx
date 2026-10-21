@@ -11,32 +11,32 @@ const gruposMenu = [
       { label: 'Novo Pedido', to: '/pdv' },
       { label: 'Mesas / Comandas', to: '/atendimento/mesas' },
       { label: 'A Receber', to: '/contas-receber', admin: true },
-      { label: 'Payment Settings', to: '/payment-settings', admin: true },
-      { label: 'Impressoras', to: '/impressoras', admin: true },
+      { label: 'Payment Settings', to: '/payment-settings', admin: true, garcom: false },
+      { label: 'Impressoras', to: '/impressoras', admin: true, garcom: false },
     ],
   },
   {
     chave: 'cadastro',
     label: 'Cadastro',
     items: [
-      { label: 'Produtos', to: '/produtos', admin: true },
-      { label: 'Mesas', to: '/cadastro/mesas', admin: true },
-      { label: 'Clientes', to: '/clientes', admin: true },
-      { label: 'Usuários', to: '/usuarios', admin: true },
+      { label: 'Produtos', to: '/produtos', admin: true, garcom: false },
+      { label: 'Mesas', to: '/cadastro/mesas', admin: true, garcom: false },
+      { label: 'Clientes', to: '/clientes', admin: true, garcom: false },
+      { label: 'Usuários', to: '/usuarios', admin: true, garcom: false, cozinha: false },
     ],
   },
   {
     chave: 'estoque',
     label: 'Estoque',
     items: [
-      { label: 'Estoque Baixo', to: '/estoque/baixo', admin: true, gerente: true },
+      { label: 'Estoque Baixo', to: '/estoque/baixo', admin: true, gerente: true, garcom: false, cozinha: false },
     ],
   },
   {
     chave: 'compras',
     label: 'Compras',
     items: [
-      { label: 'Compras', to: '/compras', admin: true },
+      { label: 'Compras', to: '/compras', admin: true, garcom: false, cozinha: false },
     ],
   },
   {
@@ -51,17 +51,17 @@ const gruposMenu = [
     chave: 'configuracoes',
     label: 'Configurações',
     items: [
-      { label: 'Configurações', to: '/configuracoes', admin: true },
-      { label: 'Auditoria', to: '/auditoria', admin: true },
+      { label: 'Configurações', to: '/configuracoes', admin: true, garcom: false, cozinha: false },
+      { label: 'Auditoria', to: '/auditoria', admin: true, garcom: false, cozinha: false },
     ],
   },
   {
     chave: 'financeiro',
     label: 'Financeiro',
     items: [
-      { label: 'Fechamento de Caixa', to: '/caixa', admin: true },
-      { label: 'Dashboard', to: '/dashboard', admin: true },
-      { label: 'Financeiro / DRE', to: '/financeiro', admin: true },
+      { label: 'Fechamento de Caixa', to: '/caixa', admin: true, garcom: false, cozinha: false },
+      { label: 'Dashboard', to: '/dashboard', admin: true, garcom: false, cozinha: false },
+      { label: 'Financeiro / DRE', to: '/financeiro', admin: true, garcom: false, cozinha: false },
     ],
   },
 ];
@@ -199,6 +199,8 @@ const visibleGroups = () => {
         items: grupo.items.filter((item) => {
           if (item.admin) return userRole === 'admin';
           if (item.roles) return item.roles.includes(userRole);
+          if (item.cozinha) return userRole === 'cozinha' || userRole === 'gerente' || userRole === 'admin';
+          if (item.garcom) return userRole === 'garcom' || userRole === 'gerente' || userRole === 'admin';
           if (item.autorizacaoGerente) return userRole !== 'garcom';
           if (item.gerente) return userRole !== 'garcom' && userRole !== 'operador';
           return true;

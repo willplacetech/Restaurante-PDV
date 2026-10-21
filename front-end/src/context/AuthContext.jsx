@@ -31,6 +31,8 @@ export const AuthProvider = ({ children }) => {
       atendente: ['atendente', 'gerente', 'admin'],
       gerente: ['gerente', 'admin'],
       admin: ['admin'],
+      garcom: ['garcom', 'gerente', 'admin'],
+      cozinha: ['cozinha', 'gerente', 'admin'],
     };
     return (roleMap[requiredRole] || []).includes(user?.role);
   };

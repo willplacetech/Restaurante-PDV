@@ -8,8 +8,8 @@ const isSupportOverrideActive = () => process.env.FORCAR_AUTORIZACAO_GERENTE ===
 
 const router = express.Router();
 
-// GET /api/configuracoes — qualquer autenticado
-router.get('/', auth, async (req, res) => {
+// GET /api/configuracoes — somente admin
+router.get('/', auth, auth.allowRoles('admin'), async (req, res) => {
   try {
     let configuracao = await Configuracoes.findOne({ _id: 'principal' });
     if (!configuracao) {
