@@ -103,6 +103,7 @@ app.use('/api/estoque', require('./routes/estoque'));
 app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/payment-settings', require('./routes/payment-settings'));
 app.use('/api/configuracoes', require('./routes/configuracoes'));
+app.use('/api/delivery', require('./routes/delivery'));
 app.use('/api/auditoria', require('./routes/auditoria'));
 
 // Rota base da API
