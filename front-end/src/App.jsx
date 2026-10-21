@@ -28,6 +28,8 @@ const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes.jsx'));
 const PaymentSettings = lazy(() => import('./pages/PaymentSettings.jsx'));
 const Impressoras = lazy(() => import('./pages/Impressoras.jsx'));
+const DeliveryAdmin = lazy(() => import('./pages/DeliveryAdmin.jsx'));
+const Entregas = lazy(() => import('./pages/Entregas.jsx'));
 const Atendimento = lazy(() => import('./pages/atendimento/Atendimento.jsx'));
 
 import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
@@ -94,6 +96,7 @@ export default function App() {
                           <Route path="/clientes" element={<Customers />} />
                           <Route path="/pedidos" element={<Navigate to="/dashboard" replace />} />
                           <Route path="/contas-receber" element={<ContasReceber />} />
+                          <Route path="/entregas" element={<Entregas />} />
                           <Route path="/dashboard" element={<Dashboard />} />
                           <Route path="/producao" element={<Production />} />
                           <Route path="/compras" element={<Purchases />} />
@@ -101,8 +104,9 @@ export default function App() {
                           <Route path="/caixa" element={<Caixa />} />
                           <Route path="/impressoras" element={<Impressoras />} />
                         </Route>
+                        <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
                         <Route element={<RoleRoute roles={['gerente', 'admin']} />}>
-                          <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
+                          <Route path="/delivery-admin" element={<DeliveryAdmin />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/pdv" />} />
                       </Route>
