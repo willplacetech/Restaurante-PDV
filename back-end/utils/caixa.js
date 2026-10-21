@@ -1,7 +1,7 @@
 const Order = require('../models/Order');
 const FechamentoCaixa = require('../models/FechamentoCaixa');
 
-const DENOMINACOES_CEDULAS = [100, 50, 20, 10, 5, 2, 1];
+const DENOMINACOES_CEDULAS = [100, 50, 20, 10, 5, 2];
 const DENOMINACOES_MOEDAS = [1, 0.5, 0.25, 0.1, 0.05];
 const money = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 

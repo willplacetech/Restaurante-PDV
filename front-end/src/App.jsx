@@ -28,6 +28,7 @@ const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes.jsx'));
 const PaymentSettings = lazy(() => import('./pages/PaymentSettings.jsx'));
 const Impressoras = lazy(() => import('./pages/Impressoras.jsx'));
+const Atendimento = lazy(() => import('./pages/atendimento/Atendimento.jsx'));
 
 import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
 import { ComandaProvider } from './context/ComandaContext.jsx';
@@ -86,6 +87,7 @@ export default function App() {
                         <Route path="/cadastro/mesas" element={<MesasCadastro />} />
                         <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin']} />}>
                           <Route path="/cozinha" element={<Kitchen />} />
+                          <Route path="/atendimento" element={<Atendimento />} />
                         </Route>
                         <Route element={<RoleRoute roles={['admin', 'gerente']} />}>
                           <Route path="/produtos" element={<Products />} />
