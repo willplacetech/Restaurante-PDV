@@ -33,6 +33,7 @@ export const AuthProvider = ({ children }) => {
       admin: ['admin'],
       garcom: ['garcom', 'gerente', 'admin'],
       cozinha: ['cozinha', 'gerente', 'admin'],
+      entregador: ['entregador', 'gerente', 'admin'],
     };
     return (roleMap[requiredRole] || []).includes(user?.role);
   };

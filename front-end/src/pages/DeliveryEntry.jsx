@@ -8,7 +8,7 @@ export default function DeliveryEntry() {
   const { user, loading } = useContext(AuthContext);
   if (loading) return null;
 
-  if (user && ['admin', 'operador'].includes(user.role) && user.tenantId) {
+  if (user && ['admin', 'operador', 'entregador'].includes(user.role) && user.tenantId) {
     return <Layout><Entregas /></Layout>;
   }
 

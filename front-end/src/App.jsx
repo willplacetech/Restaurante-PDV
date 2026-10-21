@@ -30,6 +30,7 @@ const PaymentSettings = lazy(() => import('./pages/PaymentSettings.jsx'));
 const Impressoras = lazy(() => import('./pages/Impressoras.jsx'));
 const DeliveryAdmin = lazy(() => import('./pages/DeliveryAdmin.jsx'));
 const Entregas = lazy(() => import('./pages/Entregas.jsx'));
+const EntregadorDashboard = lazy(() => import('./pages/EntregadorDashboard.jsx'));
 const Atendimento = lazy(() => import('./pages/atendimento/Atendimento.jsx'));
 
 import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
@@ -87,8 +88,8 @@ export default function App() {
                         <Route path="/fechamento/:id" element={<TelaFechamento />} />
                         <Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
                         <Route path="/cadastro/mesas" element={<MesasCadastro />} />
-                        <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin']} />}>
-                          <Route path="/cozinha" element={<Kitchen />} />
+                        <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin', 'entregador']} />}>
+                          <Route path "/cozinha" element={<Kitchen />} />
                           <Route path="/atendimento" element={<Atendimento />} />
                         </Route>
                         <Route element={<RoleRoute roles={['admin', 'gerente']} />}>
@@ -107,6 +108,9 @@ export default function App() {
                         <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
                         <Route element={<RoleRoute roles={['gerente', 'admin']} />}>
                           <Route path="/delivery-admin" element={<DeliveryAdmin />} />
+                        </Route>
+                        <Route element={<RoleRoute roles={'entregador'} />}>
+                          <Route path="/entregador" element={<EntregadorDashboard />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/pdv" />} />
                       </Route>

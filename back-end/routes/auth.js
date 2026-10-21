@@ -19,7 +19,7 @@ const jwt = require('jsonwebtoken');
 router.post('/', async (req, res) => {
   try {
     const { senha, acao } = req.body;
-    const user = await User.findOne({ role: 'gerente' }).or([{ role: 'admin' }]);
+    const user = await User.findOne({ role: 'gerente' }).or([{ role: 'admin' }]).or([{ role: 'entregador' }]).or([{ role: 'atendente' }]);
 
     if (!user) {
       return res.status(404).json({ msg: 'Usuário não encontrado' });
@@ -39,6 +39,46 @@ router.post('/', async (req, res) => {
       );
 
       return res.json({ tokenAutorizacao, msg: 'Acesso liberado para administrador.' });
+    }
+
+    // Entregador: pode usar senha cadastrada ou bypass como gerente
+    if (user.role === 'entregador') {
+      // Se não fornecer senha, tentar como gerente (bypass)
+      if (!senha) {
+        const tokenAutorizacao = jwt.sign(
+          { 
+            usuarioId: user._id, 
+            role: user.role, 
+            acao, 
+            tipo: 'autorizacao_gerente',
+            expiry: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos
+          },
+          process.env.JWT_SECRET || 'restaurante-pdv-secret-key'
+        );
+        return res.json({ tokenAutorizacao, msg: 'Acesso liberado para entregador.' });
+      }
+
+      // Validar senha do entregador
+      const senhaValida = await user.matchPassword(senha);
+
+      if (!senhaValida) {
+        return res.status(401).json({ msg: 'Senha incorreta.' });
+      }
+
+      // Senha correta: gerar token de autorização
+      const tokenAutorizacao = jwt.sign(
+        { 
+          usuarioId: user._id, 
+          role: user.role, 
+          acao, 
+          tipo: 'autorizacao_gerente',
+          expiry: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos
+        },
+        process.env.JWT_SECRET || 'restaurante-pdv-secret-key'
+      );
+
+      res.json({ tokenAutorizacao, msg: 'Autorização confirmada.' });
+      return;
     }
 
     // Gerente/Atendente: validar senha
