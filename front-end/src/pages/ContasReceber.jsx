@@ -976,7 +976,7 @@ Obrigado! 🙏`
             <h3 style={{ margin: '0 0 6px' }}>➕ Novo pedido na conta</h3>
             <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>Pedido #{novoPedidoModal.numero} · {novoPedidoModal.clienteNome}</p>
             <div className="novo-pedido-item-form">
-              <label className="novo-pedido-field">Produto<select value={novoPedidoForm.produtoId} onChange={event => setNovoPedidoForm({ ...novoPedidoForm, produtoId: event.target.value })}><option value="">Selecione um produto</option>{produtos.map(produto => <option key={produto._id} value={produto._id}>{produto.nome}</option>)}</select></label>
+              <label className="novo-pedido-field">Produto<SearchableSelect label='Produto' options={produtos.map(p => ({ label: p.nome, value: p._id }))} value={novoPedidoForm.produtoId} onChange={(val) => setNovoPedidoForm({ ...novoPedidoForm, produtoId: val })} placeholder='Buscar produto' /></label>
               <label className="novo-pedido-field novo-pedido-quantity">Quantidade<input type="number" min="0.001" step="0.001" value={novoPedidoForm.quantidade} onChange={event => setNovoPedidoForm({ ...novoPedidoForm, quantidade: event.target.value })} /></label>
               <button type="button" className="novo-pedido-add" onClick={adicionarItemNovoPedido}>Adicionar produto</button>
             </div>
