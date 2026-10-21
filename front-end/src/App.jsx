@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, lazy, Suspense } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
@@ -7,6 +8,7 @@ import PrivateRoute from './components/PrivateRoute.jsx';
 import RoleRoute from './components/RoleRoute.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
+import { waitForServiceWorkerUpdate } from './services/appVersion';
 
 const PDV = lazy(() => import('./pages/PDV.jsx'));
 const Products = lazy(() => import('./pages/Products.jsx'));
@@ -31,6 +33,40 @@ import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
 import { ComandaProvider } from './context/ComandaContext.jsx';
 
 export default function App() {
+  const [swRegistered, setSwRegistered] = useState(false);
+  const [swAvailable, setSwAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) {
+      setSwRegistered(true);
+      return;
+    }
+
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((registration) => {
+        setSwRegistered(true);
+        setSwAvailable(true);
+
+        registration.onupdatefound = () => {
+          const newWorker = registration.installing;
+          newWorker.onstatechange = () => {
+            if (newWorker.state === 'installed') {
+              if (navigator.serviceWorker.controller) {
+                waitForServiceWorkerUpdate(registration, navigator.serviceWorker)
+                  .then(() => {
+                    console.log('Atualização do service worker concluída');
+                  });
+              }
+            }
+          };
+        };
+      })
+      .catch((error) => {
+        console.error('Service Worker registration failed:', error);
+        setSwRegistered(true);
+      });
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>
