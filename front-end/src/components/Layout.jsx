@@ -10,6 +10,8 @@ const gruposMenu = [
       { label: 'Novo Pedido', to: '/pdv' },
       { label: 'Mesas / Comandas', to: '/atendimento/mesas' },
       { label: 'A Receber', to: '/contas-receber', admin: true },
+      { label: 'Payment Settings', to: '/payment-settings', admin: true },
+      { label: 'Impressoras', to: '/impressoras', admin: true },
     ],
   },
   {
@@ -20,6 +22,13 @@ const gruposMenu = [
       { label: 'Mesas', to: '/cadastro/mesas', admin: true },
       { label: 'Clientes', to: '/clientes', admin: true },
       { label: 'Usuários', to: '/usuarios', admin: true },
+    ],
+  },
+  {
+    chave: 'estoque',
+    label: 'Estoque',
+    items: [
+      { label: 'Estoque Baixo', to: '/estoque/baixo', admin: true, gerente: true },
     ],
   },
   {
@@ -35,6 +44,14 @@ const gruposMenu = [
     items: [
       { label: 'Produção', to: '/producao', admin: true },
       { label: 'Cozinha', to: '/cozinha', roles: ['admin', 'operador', 'cozinha'] },
+    ],
+  },
+  {
+    chave: 'configuracoes',
+    label: 'Configurações',
+    items: [
+      { label: 'Configurações', to: '/configuracoes', admin: true },
+      { label: 'Auditoria', to: '/auditoria', admin: true },
     ],
   },
   {
@@ -57,6 +74,7 @@ const pageTitles = {
   '/comandas': 'Mesas / Comandas',
   '/cozinha': 'Cozinha',
   '/contas-receber': 'A Receber',
+  '/estoque/baixo': 'Estoque Baixo',
   '/dashboard': 'Dashboard',
   '/producao': 'Produção',
   '/producao/fichas': 'Produção',
@@ -64,6 +82,10 @@ const pageTitles = {
   '/financeiro': 'Financeiro',
   '/caixa': 'Fechamento de Caixa',
   '/cadastro/mesas': 'Mesas',
+  '/payment-settings': 'Payment Settings',
+  '/impressoras': 'Impressoras',
+  '/configuracoes': 'Configurações',
+  '/auditoria': 'Auditoria',
 };
 
 function ChevronIcon({ open }) {
@@ -168,7 +190,7 @@ export default function Layout() {
 
   const tituloPagina = Object.entries(pageTitles).find(([path]) => pathAtivo.startsWith(path))?.[1] || 'Atendimento';
 
-  const visibleGroups = () => {
+const visibleGroups = () => {
     const userRole = user?.role;
     return gruposMenu
       .map((grupo) => ({
@@ -176,9 +198,11 @@ export default function Layout() {
         items: grupo.items.filter((item) => {
           if (item.admin) return userRole === 'admin';
           if (item.roles) return item.roles.includes(userRole);
+          if (item.autorizacaoGerente) return userRole !== 'garcom';
+          if (item.gerente) return userRole !== 'garcom' && userRole !== 'operador';
           return true;
         }),
-      }))
+      })
       .filter((grupo) => grupo.items.length > 0);
   };
 
