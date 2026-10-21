@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 import { buildNotaVendaHtml, compartilharNotaWhatsApp } from '../utils/notaVenda.js';
 import PagamentoResultadoModal from '../components/PagamentoResultadoModal.jsx';
 import DateInput from '../components/DateInput.jsx';
@@ -618,12 +619,7 @@ Obrigado! 🙏`
       }}>
         <div>
           <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Cliente</label>
-          <select value={clienteFiltro} onChange={e => setClienteFiltro(e.target.value)} style={{
-            width: '100%', padding: '10px', border: '1px solid var(--border-color)', borderRadius: 10
-          }}>
-            <option value="">Todos os clientes</option>
-            {clientes.map(c => <option key={c._id} value={c._id}>{c.nome}</option>)}
-          </select>
+          <SearchableSelect label='Cliente' options={clientes.map(c => ({ label: c.nome, value: c._id }))} value={clienteFiltro} onChange={(val) => setClienteFiltro(val)} placeholder='Buscar cliente' />
         </div>
         <div>
           <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Status</label>
