@@ -268,29 +268,19 @@ export default function Financeiro() {
     }
   };
 
-  const exportarCsv = () => {
-    const linhas = [
-      ['Receita Bruta', dre.receitaBruta],
-      ['Deduções', dre.deducoes],
-      ['Receita Líquida', dre.receitaLiquida],
-      ['CMV', dre.cmv],
-      ['Fórmula do CMV', dre.cmvFormula],
-      ['Lucro Bruto', dre.lucroBruto],
-      ['Despesas Operacionais', dre.despesasOperacionais],
-      ['EBIT', dre.ebit],
-      ['Depreciação/Amortização', dre.depreciacaoAmortizacao],
-      ['EBITDA', dre.ebitda],
-      ['Financeiro', dre.despesasFinanceiras],
-      ['Lucro Líquido', dre.lucroLiquido],
-    ];
-
-    const blob = new Blob([linhas.map((linha) => linha.join(';')).join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dre-${mesSelecionado}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportarCsv = async () => {
+    try {
+      const response = await api.get(`/dre/csv?periodo=${mesSelecionado}`);
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dre-${mesSelecionado}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast('Erro ao exportar CSV', 'error');
+    }
   };
 
   const renderStatusBadge = (status) => (

@@ -459,6 +459,21 @@ export default function ContasReceber() {
   };
 
 
+  const exportarCsvContasReceber = async () => {
+    try {
+      const response = await api.get('/contas-receber/csv');
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `contas-receber-${new Date().toLocaleDateString('pt-BR')}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast('Erro ao exportar CSV', 'error');
+    }
+  };
+  
   const enviarWhatsApp = (pedido) => {
     return compartilharNotaWhatsApp(pedido, { titulo: pedido.status === 'pago' ? 'NOTA DE VENDA' : 'PEDIDO PENDENTE' });
     const totalPago = Array.isArray(pedido.pagamentos)
@@ -684,6 +699,13 @@ Obrigado! 🙏`
                   border: 'none', borderRadius: 8,
                   fontSize: 12, fontWeight: 600, cursor: 'pointer'
                 }}>📄 Relatório do cliente</button>
+              )}
+              {clienteFiltro && (
+                <button onClick={exportarCsvContasReceber} style={{
+                  padding: '6px 12px', background: 'var(--accent-primary)', color: '#fff',
+                  border: 'none', borderRadius: 8,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                }}>📊 CSV Exportar</button>
               )}
             </div>
             {/* ✅ Mostra valor dos marcados */}

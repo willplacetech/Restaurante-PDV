@@ -96,7 +96,7 @@ app.use('/api/receitas', require('./routes/receitas'));
 app.use('/api/produtos', require('./routes/products'));
 
 // Rotas adicionadas da migração PDV-Cafe
-app.use('/api/contas-receber', require('./routes/contas-receber'));
+app.use('/api/dre', require('./routes/dre'));
 app.use('/api/estoque', require('./routes/estoque'));
 app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/payment-settings', require('./routes/payment-settings'));

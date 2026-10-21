@@ -38,4 +38,35 @@ router.get('/baixo', async (req, res) => {
   }
 });
 
+const csv = require('csv-stringify/sync');
+
+router.get('/csv', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
+  try {
+    const produtos = await Product.find({ ativo: { $ne: false } })
+      .select('_id nome tipo tipoProduto categoria aFazer estoque estoquePesoKg estoquePesoNormalizado pesoPorUnidade estoqueMinimo estoqueMinimoBase estoqueMinimoEmbalagens estoqueEmbalagens estoqueInsumos estoqueConteudoAberto conteudoPorEmbalagem unidade unidadeCompra unidadeConteudo unidadeVenda')
+      .lean();
+
+    const dados = produtos.map(({ produto, qtdAtual, minimo, unidade }) => ({
+      id: produto._id,
+      nome: produto.nome,
+      tipo: produto.tipo,
+      categoria: produto.categoria,
+      qtd_atual: qtdAtual,
+      minimo,
+      unidade,
+      tipo_reposicao: produto.tipo === 'insumo' ? 'embalagem(ns)' : (produtoControlaPeso(produto) ? 'peso' : 'estoque'),
+      estoque_reposicao: produto.tipo === 'insumo'
+        ? produto.estoqueEmbalagens ?? produto.estoqueInsumos ?? produto.estoque ?? 0
+        : produtoControlaPeso(produto) ? estoquePesoAtualKg(produto) : produto.estoque || 0,
+    }));
+
+    const csvString = csv.stringify(dados, { header: true, columnMode: 'natural' });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=estoque.csv');
+    res.send(csvString);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+});
+
 module.exports = router;
