@@ -1,6 +1,7 @@
 # Dependências
 node_modules/
 */node_modules/
+/Cafe/
 
 # Variáveis de ambiente e segredos
 .env
