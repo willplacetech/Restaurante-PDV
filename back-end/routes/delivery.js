@@ -61,7 +61,8 @@ router.post('/entregadores', auth, async (req, res) => {
 
 // PUT /api/delivery/entregadores/:id - Atualizar entregador
 router.put('/entregadores/:id', auth, async (req, res) => {
-  try const { nome, telefone, senha, ativo } = req.body;
+  try {
+    const { nome, telefone, senha, ativo } = req.body;
     const entregador = await Entregador.findByIdAndUpdate(
       req.params.id,
       { nome, telefone, senha, ativo, atualizadoEm: Date.now() },

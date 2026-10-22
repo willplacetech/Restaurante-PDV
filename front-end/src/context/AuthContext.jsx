@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import api from '../services/api.jsx';
 import { AuthContext } from './AuthContextDefinition.jsx';
 
@@ -9,8 +9,31 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem('pdv_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
-  const loading = false;
-  
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const validateToken = async () => {
+      const token = localStorage.getItem('pdv_token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data } = await api.get('/auth/me');
+        setUser(data);
+        localStorage.setItem('pdv_user', JSON.stringify(data));
+      } catch (error) {
+        if (error.response?.status === 401) {
+          localStorage.removeItem('pdv_token');
+          localStorage.removeItem('pdv_user');
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    };
+    validateToken();
+  }, []);
+
   const login = async (username, password) => {
     const { data } = await api.post('/auth/login', { username, password });
     localStorage.setItem('pdv_token', data.token);
@@ -19,7 +42,12 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const logout = () => {
+  const logout = async () => {
+try {
+      await api.post('/auth/logout');
+    } catch {
+      // ignore logout errors
+    }
     localStorage.clear();
     setUser(null);
     location.reload();
@@ -28,12 +56,13 @@ export const AuthProvider = ({ children }) => {
   const hasRole = (role) => !user || user.role === role;
   const canAccessMenu = (requiredRole) => {
     const roleMap = {
-      atendente: ['atendente', 'gerente', 'admin'],
+      atendente: ['atendente', 'gerente', 'admin', 'operador'],
       gerente: ['gerente', 'admin'],
       admin: ['admin'],
       garcom: ['garcom', 'gerente', 'admin'],
       cozinha: ['cozinha', 'gerente', 'admin'],
       entregador: ['entregador', 'gerente', 'admin'],
+      operador: ['operador', 'atendente', 'gerente', 'admin'],
     };
     return (roleMap[requiredRole] || []).includes(user?.role);
   };

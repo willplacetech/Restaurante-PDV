@@ -106,7 +106,7 @@ router.get('/users', auth.adminOnly, async (req, res) => {
 router.post('/users', auth.adminOnly, async (req, res) => {
   try {
     const { name, email, username, password, role } = req.body || {};
-    if (!name || !password || !['atendente', 'gerente', 'admin', 'garcom', 'cozinha', 'entregador'].includes(role)) {
+    if (!name || !password || !['atendente', 'gerente', 'admin', 'garcom', 'cozinha', 'entregador', 'operador'].includes(role)) {
       return res.status(400).json({ message: 'Informe nome, senha, e-mail/usuário e perfil válido' });
     }
 
@@ -207,8 +207,8 @@ router.patch('/users/:id', auth.adminOnly, async (req, res) => {
       return res.status(400).json({ message: 'O nome de usuário deve ter pelo menos 3 caracteres' });
     }
 
-    if ('role' in body && !['atendente', 'gerente', 'admin', 'garcom', 'cozinha', 'entregador'].includes(body.role)) {
-      return res.status(400).json({ message: 'O perfil deve ser um dos seguintes: atendente, gerente, admin, garcom, cozinha, entregador' });
+    if ('role' in body && !['atendente', 'gerente', 'admin', 'garcom', 'cozinha', 'entregador', 'operador'].includes(body.role)) {
+      return res.status(400).json({ message: 'O perfil deve ser um dos seguintes: atendente, gerente, admin, garcom, cozinha, entregador, operador' });
     }
 
     if ('password' in body && (typeof body.password !== 'string' || body.password.length < 4)) {
