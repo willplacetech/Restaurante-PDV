@@ -1,4 +1,4 @@
-/* global describe, beforeEach, cy, it */
+/* global describe, beforeEach, cy, expect, it */
 
 describe('Acesso de entregador pelo login', () => {
   beforeEach(() => {
@@ -13,6 +13,17 @@ describe('Acesso de entregador pelo login', () => {
 
   it('usa o caminho da imagem de login com a capitalização existente no servidor', () => {
     cy.get('img[src="/imagem3.jpg"]').should('exist');
+  });
+
+  it('não registra o service worker legado em paralelo ao PWA', () => {
+    cy.window().then(async ({ navigator }) => {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      const legacyRegistration = registrations.find((registration) => {
+        const worker = registration.active || registration.waiting || registration.installing;
+        return worker && new URL(worker.scriptURL).pathname === '/service-worker.js';
+      });
+      expect(legacyRegistration).to.be.undefined;
+    });
   });
 
   it('encaminha o entregador autenticado ao painel de entregas', () => {
@@ -43,6 +54,12 @@ describe('Acesso de entregador pelo login', () => {
     cy.wait('@courierOrders');
     cy.location('pathname').should('eq', '/entregador');
     cy.contains('MINHAS ENTREGAS').should('be.visible');
+
+    cy.window().then((window) => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    cy.location('pathname').should('eq', '/entregador');
   });
 
   it('mantém usuários de equipe no PDV', () => {
@@ -66,5 +83,11 @@ describe('Acesso de entregador pelo login', () => {
     cy.wait('@loginStaff');
     cy.location('pathname').should('eq', '/pdv');
     cy.get('#pdv-produtos-titulo').should('be.visible');
+
+    cy.window().then((window) => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    cy.location('pathname').should('eq', '/pdv');
   });
 });

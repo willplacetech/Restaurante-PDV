@@ -1,6 +1,6 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext.jsx';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { ToastProvider } from './components/Toast.jsx';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -8,7 +8,6 @@ import PrivateRoute from './components/PrivateRoute.jsx';
 import RoleRoute from './components/RoleRoute.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
-import { waitForServiceWorkerUpdate } from './services/appVersion';
 
 const PDV = lazy(() => import('./pages/PDV.jsx'));
 const Products = lazy(() => import('./pages/Products.jsx'));
@@ -36,31 +35,14 @@ const Atendimento = lazy(() => import('./pages/atendimento/Atendimento.jsx'));
 import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
 import { ComandaProvider } from './context/ComandaContext.jsx';
 
+function HomeRedirect() {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  return <Navigate to={user?.role === 'entregador' ? '/entregador' : user ? '/pdv' : '/login'} replace />;
+}
+
 export default function App() {
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((registration) => {
-        registration.onupdatefound = () => {
-          const newWorker = registration.installing;
-          newWorker.onstatechange = () => {
-            if (newWorker.state === 'installed') {
-              if (navigator.serviceWorker.controller) {
-                waitForServiceWorkerUpdate(registration, navigator.serviceWorker)
-                  .then(() => {
-                    console.log('Atualização do service worker concluída');
-                  });
-              }
-            }
-          };
-        };
-      })
-      .catch((error) => {
-        console.error('Service Worker registration failed:', error);
-      });
-  }, []);
-
   return (
     <ThemeProvider>
       <AuthProvider>
@@ -71,6 +53,7 @@ export default function App() {
                 <ErrorBoundary fallback={<div>Erro na aplicação. Tente recarregar.</div>}>
                   <Suspense fallback={<div role="status">Carregando página...</div>}>
                     <Routes>
+                      <Route path="/" element={<HomeRedirect />} />
                       <Route path="/login" element={<Login />} />
                       <Route element={<PrivateRoute />}>
                         <Route element={<Layout />}>
