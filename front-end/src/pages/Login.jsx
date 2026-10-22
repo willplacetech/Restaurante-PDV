@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect, useRef } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 
@@ -62,7 +62,7 @@ export default function Login() {
     if (erro) erroRef.current?.focus();
   }, [erro]);
 
-  if (user) return <Navigate to="/pdv" />;
+  if (user) return <Navigate to={user.role === 'entregador' ? '/entregador' : '/pdv'} replace />;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -191,6 +191,10 @@ export default function Login() {
             </button>
           </form>
 
+          <Link className="login-courier" to="/entregador">
+            Acesso do entregador
+          </Link>
+
           {showInstallButton ? (
             <button
               type="button"
@@ -287,6 +291,14 @@ const loginStyles = `
   .login-error { text-align: left; }
   .login-error[hidden] { display: none; }
   .login-submit { width: 100%; margin-top: var(--space-1); }
+  .login-courier {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; min-height: var(--touch-target); padding: 10px var(--space-2);
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface-muted); color: var(--color-text);
+    font-size: 14px; font-weight: 600; text-decoration: none;
+  }
+  .login-courier:hover { background: var(--color-surface-hover); }
   .login-install { width: 100%; }
   .login-install-hint {
     margin: 0; font-size: 12px; text-align: center;
