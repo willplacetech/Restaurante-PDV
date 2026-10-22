@@ -1,6 +1,7 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const FechamentoCaixa = require('../models/FechamentoCaixa');
+const { recordAuditEvent } = require('../services/auditLog');
 const {
   DENOMINACOES_CEDULAS,
   DENOMINACOES_MOEDAS,
@@ -75,6 +76,15 @@ router.post('/:id/movimentos', async (req, res) => {
     const base = await buscarBaseSistema(fechamento.data, fechamento.turno);
     fechamento.sistema = prepararSistema(base, fechamento);
     await fechamento.save();
+
+    try {
+      await recordAuditEvent({
+        req,
+        action: tipo === 'sangrias' ? 'caixa.sangria' : 'caixa.suprimento',
+        details: { fechamentoId: String(fechamento._id), valor, responsavel, motivo, tipo },
+      });
+    } catch (_) {}
+
     res.status(201).json(fechamento);
   } catch (error) { res.status(400).json({ msg: error.message }); }
 });
@@ -113,6 +123,15 @@ router.post('/:id/fechar', async (req, res) => {
     fechamento.usuarioFechamento = req.user.username;
     fechamento.status = 'fechado';
     await fechamento.save();
+
+    try {
+      await recordAuditEvent({
+        req,
+        action: 'caixa.fechamento',
+        details: { fechamentoId: String(fechamento._id), data: fechamento.data, turno: fechamento.turno, conferencia, observacao },
+      });
+    } catch (_) {}
+
     res.json(fechamento);
   } catch (error) { res.status(400).json({ msg: error.message }); }
 });

@@ -102,7 +102,7 @@ app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/payment-settings', require('./routes/payment-settings'));
 app.use('/api/configuracoes', require('./routes/configuracoes'));
 app.use('/api/delivery', require('./routes/delivery'));
-app.use('/api/auth', require('./routes/auth'));
+app.use('/api/contas-receber', require('./routes/contas-receber'));
 app.use('/api/auditoria', require('./routes/auditoria'));
 
 // Rota base da API
