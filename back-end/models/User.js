@@ -9,16 +9,31 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     minlength: [2, 'Usuário deve ter pelo menos 2 caracteres'],
   },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    sparse: true,
+    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'E-mail inválido'],
+  },
   password: {
     type: String,
     required: [true, 'Senha é obrigatória'],
     minlength: [4, 'Senha deve ter pelo menos 4 caracteres'],
-    select: false, // Não retorna senha nas consultas
+    select: false,
   },
   role: {
     type: String,
     enum: ['atendente', 'gerente', 'admin', 'garcom', 'cozinha', 'entregador'],
     default: 'atendente',
+  },
+  active: {
+    type: Boolean,
+    default: true,
+  },
+  archivedAt: {
+    type: Date,
+    default: null,
   },
   createdAt: {
     type: Date,
@@ -26,7 +41,6 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
-// Criptografar senha antes de salvar
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
@@ -36,7 +50,6 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
-// Comparar senhas
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };

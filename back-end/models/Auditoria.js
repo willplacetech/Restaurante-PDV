@@ -1,18 +1,18 @@
 const mongoose = require('mongoose');
+const { auditActions } = require('../services/auditLog');
 
 const AuditoriaSchema = new mongoose.Schema({
-  usuarioId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  username: { type: String, required: true },
-  role: { type: String, required: true },
-  acao: { type: String, required: true },
-  descricao: { type: String, default: '' },
-  ip: { type: String },
-  userAgent: { type: String },
-  detalhes: { type: String, default: '' },
-  createdAt: { type: Date, default: Date.now },
-});
+  data: { type: Date, required: true, default: Date.now, immutable: true },
+  usuarioSolicitante: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, immutable: true },
+  usuarioAutorizou: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, immutable: true },
+  acao: { type: String, required: true, enum: auditActions, immutable: true },
+  detalhes: { type: mongoose.Schema.Types.Mixed, default: {}, immutable: true },
+  ip: { type: String, maxlength: 64, default: '', immutable: true },
+  sucesso: { type: Boolean, required: true, immutable: true },
+}, { versionKey: false });
 
-AuditoriaSchema.index({ usuarioId: 1, createdAt: -1 });
-AuditoriaSchema.index({ acao: 1, createdAt: -1 });
+AuditoriaSchema.index({ data: -1 });
+AuditoriaSchema.index({ usuarioSolicitante: 1, data: -1 });
+AuditoriaSchema.index({ acao: 1, data: -1 });
 
 module.exports = mongoose.model('Auditoria', AuditoriaSchema);
