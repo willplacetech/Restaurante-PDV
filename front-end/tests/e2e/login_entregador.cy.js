@@ -11,6 +11,10 @@ describe('Acesso de entregador pelo login', () => {
       .should('have.attr', 'href', '/entregador');
   });
 
+  it('usa o caminho da imagem de login com a capitalização existente no servidor', () => {
+    cy.get('img[src="/imagem3.jpg"]').should('exist');
+  });
+
   it('encaminha o entregador autenticado ao painel de entregas', () => {
     cy.intercept('POST', '/api/auth/login', {
       statusCode: 200,
@@ -61,5 +65,6 @@ describe('Acesso de entregador pelo login', () => {
 
     cy.wait('@loginStaff');
     cy.location('pathname').should('eq', '/pdv');
+    cy.get('#pdv-produtos-titulo').should('be.visible');
   });
 });

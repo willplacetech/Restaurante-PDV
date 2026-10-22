@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast.jsx';
 
 // Imagens de ambiente da cafeteria. Se nao existirem no servidor, o painel
 // mantem o fundo terracota e o degrade continua funcionando.
-const imagensAmbiente = ['/Imagem1.webp', '/imagem4.jpeg', '/Imagem3.jpg'];
+const imagensAmbiente = ['/Imagem1.webp', '/imagem4.jpeg', '/imagem3.jpg'];
 
 const FORMULARIO_VAZIO = { username: '', password: '' };
 

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const useTecladoAtalhos = ({ onNovaVenda, onFocarBusca, onConfirmar }) => {
+const useTecladoAtalhos = ({ onNovaVenda, onFocarBusca, onConfirmar } = {}) => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'F2') {

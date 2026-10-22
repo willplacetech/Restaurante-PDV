@@ -19,7 +19,7 @@ export default function PDV() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { addToQueue, isOnline } = useFilaOffline();
-  const { onNovaVenda, onFocarBusca, onConfirmar } = useTecladoAtalhos();
+  useTecladoAtalhos();
   const [produtos, setProdutos] = useState([]);
   const [itens, setItens] = useState([]);
   const [cliente, setCliente] = useState('');
