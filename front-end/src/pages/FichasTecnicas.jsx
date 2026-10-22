@@ -7,12 +7,13 @@ import { AuthContext } from '../context/AuthContext.jsx';
 const units = ['kg', 'L', 'un'];
 const factors = { g: 0.001, kg: 1, ml: 0.001, l: 1, L: 1, un: 1 };
 const emptyRecipe = { nome: '', produtoId: '', rendimento: '1', unidadeRendimento: 'un', ingredientes: [{ produtoId: '', quantidade: '', unidade: 'un' }] };
-const number = (value) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const money = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 const tipoDoProduto = (product) => {
   const safeProduct = product || {};
-  return safeProduct.aFazer ? 'coz' : safeProduct.producaoPropria ? 'producao' : safeProduct.tipoProduto || 'revenda';
+  return safeProduct.tipoProduto === 'revenda' ? 'revenda' : (modoDoProduto(safeProduct) ? 'preparacao' : 'pendente');
 };
+const modoDoProduto = (product) => product?.modoOperacional
+  || (product?.tipoProduto === 'coz' || product?.aFazer ? 'sob_demanda' : product?.tipoProduto === 'producao' || product?.producaoPropria ? 'lote' : null);
 
 export default function FichasTecnicas({ embedded = false }) {
   const [searchParams] = useSearchParams();
@@ -40,7 +41,7 @@ export default function FichasTecnicas({ embedded = false }) {
 
   useEffect(() => { load(); }, []);
 
-  const recipeProducts = products.filter((product) => product && ['coz', 'producao'].includes(tipoDoProduto(product)));
+  const recipeProducts = products.filter((product) => product && tipoDoProduto(product) === 'preparacao' && modoDoProduto(product));
   const ingredients = products.filter((product) => product && (product.tipo === 'insumo' || product.usavelEmReceita));
   const ingredientById = (id) => ingredients.find((product) => String(product._id) === String(id));
 
@@ -51,8 +52,10 @@ export default function FichasTecnicas({ embedded = false }) {
         limiting: recipe.disponibilidade.limitante || 'Nenhum ingrediente',
       };
     }
-    const tipo = tipoDoProduto(recipe.produtoId);
-    if (tipo === 'producao') return { quantity: Number(recipe.produtoId?.estoque || 0), limiting: 'Estoque do produto' };
+    const produto = typeof recipe.produtoId === 'object' ? recipe.produtoId : recipeProducts.find((item) => String(item._id) === String(recipe.produtoId));
+    const modo = recipe.modoOperacional || modoDoProduto(produto);
+    if (modo === 'lote') return { quantity: Number(produto?.estoque || 0), limiting: 'Estoque do produto' };
+    if (!modo) return { quantity: 0, limiting: 'Modo operacional pendente' };
     const values = (recipe.ingredientes || []).filter(Boolean).map((item) => {
       const product = ingredientById(item.produtoId?._id || item.produtoId);
       const stock = Number(product?.resumoInsumo?.totalBase ?? product?.estoqueInsumos ?? product?.estoque ?? 0);
@@ -71,10 +74,17 @@ export default function FichasTecnicas({ embedded = false }) {
   const filteredRecipes = recipes.filter((recipe) => {
     if (!recipe || !Array.isArray(recipe.ingredientes)) return false;
     const product = recipe.produtoId || {};
-    const tipo = tipoDoProduto(product);
-    const typeOk = filter === 'todos' || (filter === 'coz' ? tipo === 'coz' : tipo === 'producao');
+    const modo = recipe.modoOperacional || modoDoProduto(product);
+    if (!modo) return false;
+    const typeOk = filter === 'todos' || (filter === 'sob_demanda' ? modo === 'sob_demanda' : modo === 'lote');
     return typeOk && String(product.nome || recipe.nome).toLowerCase().includes(search.toLowerCase()) && recipe.ingredientes.every(Boolean);
   });
+
+  const startEdit = (recipe) => {
+    setEditingId(recipe._id);
+    setRecipeForm({ nome: recipe.nome, produtoId: recipe.produtoId?._id || recipe.produtoId, rendimento: String(recipe.rendimento), unidadeRendimento: recipe.unidadeRendimento, ingredientes: (recipe.ingredientes || []).filter(Boolean).map((item) => ({ produtoId: item.produtoId?._id || item.produtoId, quantidade: String(item.quantidade), unidade: item.unidade })) });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     const productId = searchParams.get('produto');
@@ -83,12 +93,6 @@ export default function FichasTecnicas({ embedded = false }) {
       if (recipe) startEdit(recipe);
     }
   }, [recipes, searchParams]);
-
-  const startEdit = (recipe) => {
-    setEditingId(recipe._id);
-    setRecipeForm({ nome: recipe.nome, produtoId: recipe.produtoId?._id || recipe.produtoId, rendimento: String(recipe.rendimento), unidadeRendimento: recipe.unidadeRendimento, ingredientes: (recipe.ingredientes || []).filter(Boolean).map((item) => ({ produtoId: item.produtoId?._id || item.produtoId, quantidade: String(item.quantidade), unidade: item.unidade })) });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   const duplicate = (recipe) => {
     setEditingId(null);
@@ -101,8 +105,8 @@ export default function FichasTecnicas({ embedded = false }) {
     setSaving(true);
     try {
       const produto = recipeProducts.find((item) => String(item._id) === String(recipeForm.produtoId));
-      const tipoProduto = tipoDoProduto(produto);
-      const payload = { ...recipeForm, rendimento: tipoProduto === 'coz' ? 1 : Number(recipeForm.rendimento), ingredientes: recipeForm.ingredientes.map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade), unidade: item.unidade })) };
+      const modoOperacional = modoDoProduto(produto);
+      const payload = { ...recipeForm, rendimento: modoOperacional === 'sob_demanda' ? 1 : Number(recipeForm.rendimento), ingredientes: recipeForm.ingredientes.map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade), unidade: item.unidade })) };
       const salvar = (dados) => editingId ? api.put(`/production/recipes/${editingId}`, dados) : api.post('/production/recipes', dados);
       try {
         await salvar(payload);
@@ -125,8 +129,24 @@ export default function FichasTecnicas({ embedded = false }) {
 
   return <div className={`technical-sheets-page ${embedded ? 'embedded' : ''} ${canEdit ? '' : 'read-only'}`}>
     {!embedded && <header className="page-heading"><div><span className="production-eyebrow">PRODUÇÃO</span><h1>📋 Ficha técnica</h1><p>Ficha técnica, ingredientes, custo e disponibilidade em um único lugar.</p></div><strong className="technical-sheets-count">{recipes.length} ficha(s)</strong></header>}
-    {canEdit && <form className="technical-sheet-form" onSubmit={save}><div className="section-heading"><div><h2>{editingId ? 'Editar ficha técnica' : 'Nova ficha técnica'}</h2><p>Vincule uma ficha técnica a um produto Coz ou de produção própria.</p></div></div><div className="technical-sheet-grid"><label>Produto vinculado<select required value={recipeForm.produtoId} onChange={(event) => { const product = recipeProducts.find((item) => item._id === event.target.value); setRecipeForm({ ...recipeForm, produtoId: event.target.value, nome: recipeForm.nome || product?.nome || '' }); }}><option value="">Selecione um produto</option>{recipeProducts.map((product) => <option key={product._id} value={product._id}>{product.nome} · {product.aFazer ? 'Coz' : 'Produção Própria'}</option>)}</select></label><label>Nome da ficha<input required value={recipeForm.nome} onChange={(event) => setRecipeForm({ ...recipeForm, nome: event.target.value })} /></label><label>Rendimento<input required type="number" min="0.001" step="0.001" value={recipeForm.rendimento} onChange={(event) => setRecipeForm({ ...recipeForm, rendimento: event.target.value })} /></label><label>Unidade do rendimento<select value={recipeForm.unidadeRendimento} onChange={(event) => setRecipeForm({ ...recipeForm, unidadeRendimento: event.target.value })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select></label></div><div className="technical-ingredients-heading"><h3>Ingredientes</h3><button type="button" className="secondary" onClick={() => setRecipeForm({ ...recipeForm, ingredientes: [...recipeForm.ingredientes, { produtoId: '', quantidade: '', unidade: 'un' }] })}>+ Adicionar ingrediente</button></div><div className="technical-ingredients">{recipeForm.ingredientes.map((item, index) => <div className="technical-ingredient-row" key={`${index}-${item.produtoId}`}><select required value={item.produtoId} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, produtoId: event.target.value } : current) })}><option value="">Insumo</option>{ingredients.map((product) => <option key={product._id} value={product._id}>{product.nome}</option>)}</select><input required type="number" min="0.001" step="0.001" value={item.quantidade} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, quantidade: event.target.value } : current) })} placeholder="Quantidade" /><select value={item.unidade} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, unidade: event.target.value } : current) })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select><button type="button" className="danger" disabled={recipeForm.ingredientes.length === 1} onClick={() => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.filter((_, currentIndex) => currentIndex !== index) })}>Remover</button></div>)}</div>{recipeForm.produtoId && <div className="technical-calculation"><span>Custo total: <strong>{money(cost(recipeForm))}</strong></span><span>Custo por unidade: <strong>{money(cost(recipeForm) / Math.max(1, Number(recipeForm.rendimento || 1)))}</strong></span><span>Disponível para fazer: <strong>{availability(recipeForm).quantity} {recipeForm.unidadeRendimento}</strong></span><small>Ingrediente limitante: {availability(recipeForm).limiting}</small></div>}<div className="technical-form-actions"><button className="primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar ficha'}</button>{editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setRecipeForm(emptyRecipe); }}>Voltar</button>}</div></form>}
-    <section className="technical-sheet-list"><div className="section-heading"><div><h2>Lista de fichas</h2><p>Disponibilidade calculada com o estoque atual dos insumos.</p></div></div><div className="technical-filters"><div><button type="button" className={filter === 'todos' ? 'active' : ''} onClick={() => setFilter('todos')}>Todas</button><button type="button" className={filter === 'coz' ? 'active' : ''} onClick={() => setFilter('coz')}>Coz</button><button type="button" className={filter === 'producao' ? 'active' : ''} onClick={() => setFilter('producao')}>Produção Própria</button></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome" /></div>{loading ? <p className="empty">Carregando fichas...</p> : filteredRecipes.length ? <div className="technical-table-wrap"><table className="technical-table"><thead><tr><th>Produto</th><th>Tipo</th><th>Disponível</th><th>Custo/unidade</th><th>Ações</th></tr></thead><tbody>{filteredRecipes.map((recipe) => { const current = availability(recipe); const className = current.quantity >= 5 ? 'technical-good' : current.quantity > 0 ? 'technical-warning' : 'technical-empty'; return <tr key={recipe._id}><td><strong>{recipe.produtoId?.nome || recipe.nome}</strong><small>{recipe.nome}</small></td><td>{recipe.tipoFicha === 'coz' ? 'Coz' : 'Produção Própria'}</td><td><button type="button" className={`technical-availability ${className}`} title={`Ingrediente limitante: ${current.limiting}`}>{current.quantity >= 5 ? '✅' : current.quantity > 0 ? '⚠️' : '❌'} {current.quantity} {recipe.unidadeRendimento}</button></td><td>{money(recipe.custoUnitario)}</td><td><div className="technical-actions"><button type="button" className="secondary" onClick={() => startEdit(recipe)}>✏️</button><button type="button" className="secondary" onClick={() => duplicate(recipe)}>📋</button><button type="button" className="danger" onClick={() => remove(recipe)}>🗑️</button></div></td></tr>; })}</tbody></table></div> : <p className="empty">Nenhuma ficha técnica encontrada.</p>}</section>
+    {canEdit && <form className="technical-sheet-form" onSubmit={save}>
+      <div className="section-heading"><div><h2>{editingId ? 'Editar ficha técnica' : 'Nova ficha técnica'}</h2><p>Vincule a ficha a um produto da categoria Preparação.</p></div></div>
+      <div className="technical-sheet-grid">
+        <label>Produto vinculado<select required value={recipeForm.produtoId} onChange={(event) => { const product = recipeProducts.find((item) => item._id === event.target.value); setRecipeForm({ ...recipeForm, produtoId: event.target.value, nome: recipeForm.nome || product?.nome || '', rendimento: modoDoProduto(product) === 'sob_demanda' ? '1' : recipeForm.rendimento }); }}><option value="">Selecione um produto</option>{recipeProducts.map((product) => <option key={product._id} value={product._id}>{product.nome} · Preparação ({modoDoProduto(product) === 'lote' ? 'lote' : 'sob demanda'})</option>)}</select></label>
+        <label>Nome da ficha<input required value={recipeForm.nome} onChange={(event) => setRecipeForm({ ...recipeForm, nome: event.target.value })} /></label>
+        <label>Rendimento<input required type="number" min="0.001" step="0.001" value={recipeForm.rendimento} onChange={(event) => setRecipeForm({ ...recipeForm, rendimento: event.target.value })} /></label>
+        <label>Unidade do rendimento<select value={recipeForm.unidadeRendimento} onChange={(event) => setRecipeForm({ ...recipeForm, unidadeRendimento: event.target.value })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+      </div>
+      <div className="technical-ingredients-heading"><h3>Ingredientes</h3><button type="button" className="secondary" onClick={() => setRecipeForm({ ...recipeForm, ingredientes: [...recipeForm.ingredientes, { produtoId: '', quantidade: '', unidade: 'un' }] })}>+ Adicionar ingrediente</button></div>
+      <div className="technical-ingredients">{recipeForm.ingredientes.map((item, index) => <div className="technical-ingredient-row" key={`${index}-${item.produtoId}`}><select required value={item.produtoId} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, produtoId: event.target.value } : current) })}><option value="">Insumo</option>{ingredients.map((product) => <option key={product._id} value={product._id}>{product.nome}</option>)}</select><input required type="number" min="0.001" step="0.001" value={item.quantidade} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, quantidade: event.target.value } : current) })} placeholder="Quantidade" /><select value={item.unidade} onChange={(event) => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.map((current, currentIndex) => currentIndex === index ? { ...current, unidade: event.target.value } : current) })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select><button type="button" className="danger" disabled={recipeForm.ingredientes.length === 1} onClick={() => setRecipeForm({ ...recipeForm, ingredientes: recipeForm.ingredientes.filter((_, currentIndex) => currentIndex !== index) })}>Remover</button></div>)}</div>
+      {recipeForm.produtoId && <div className="technical-calculation"><span>Custo total: <strong>{money(cost(recipeForm))}</strong></span><span>Custo por unidade: <strong>{money(cost(recipeForm) / Math.max(1, Number(recipeForm.rendimento || 1)))}</strong></span><span>Disponível para fazer: <strong>{availability(recipeForm).quantity} {recipeForm.unidadeRendimento}</strong></span><small>Ingrediente limitante: {availability(recipeForm).limiting}</small></div>}
+      <div className="technical-form-actions"><button className="primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar ficha'}</button>{editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setRecipeForm(emptyRecipe); }}>Voltar</button>}</div>
+    </form>}
+    <section className="technical-sheet-list">
+      <div className="section-heading"><div><h2>Lista de fichas</h2><p>Disponibilidade calculada com o estoque atual dos insumos.</p></div></div>
+      <div className="technical-filters"><div><button type="button" className={filter === 'todos' ? 'active' : ''} onClick={() => setFilter('todos')}>Todas</button><button type="button" className={filter === 'sob_demanda' ? 'active' : ''} onClick={() => setFilter('sob_demanda')}>Sob demanda</button><button type="button" className={filter === 'lote' ? 'active' : ''} onClick={() => setFilter('lote')}>Lote</button></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome" /></div>
+      {loading ? <p className="empty">Carregando fichas...</p> : filteredRecipes.length ? <div className="technical-table-wrap"><table className="technical-table"><thead><tr><th>Produto</th><th>Categoria / modo</th><th>Disponível</th><th>Custo/unidade</th><th>Ações</th></tr></thead><tbody>{filteredRecipes.map((recipe) => { const current = availability(recipe); const className = current.quantity >= 5 ? 'technical-good' : current.quantity > 0 ? 'technical-warning' : 'technical-empty'; return <tr key={recipe._id}><td><strong>{recipe.produtoId?.nome || recipe.nome}</strong><small>{recipe.nome}</small></td><td>Preparação · {recipe.modoOperacional === 'lote' ? 'Lote' : 'Sob demanda'}</td><td><button type="button" className={`technical-availability ${className}`} title={`Ingrediente limitante: ${current.limiting}`}>{current.quantity >= 5 ? '✅' : current.quantity > 0 ? '⚠️' : '❌'} {current.quantity} {recipe.unidadeRendimento}</button></td><td>{money(recipe.custoUnitario)}</td><td><div className="technical-actions"><button type="button" className="secondary" onClick={() => startEdit(recipe)}>✏️</button><button type="button" className="secondary" onClick={() => duplicate(recipe)}>📋</button><button type="button" className="danger" onClick={() => remove(recipe)}>🗑️</button></div></td></tr>; })}</tbody></table></div> : <p className="empty">Nenhuma ficha técnica encontrada.</p>}
+    </section>
     <style>{styles}</style>
     <style>{readOnlyStyles}</style>
   </div>;

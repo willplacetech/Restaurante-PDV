@@ -8,6 +8,7 @@ const StockMovement = require('../models/StockMovement');
 const { converterCustoBase, calcularVariacaoPercentual } = require('../utils/custo');
 const { calcularResumoCompleto, ajustarEstoque, calcularCustoUnitarioBase, calcularCustoDaFichaTecnica } = require('../utils/estoqueInsumo');
 const { enfileirarRecalculoPorInsumo } = require('../utils/filaCusto');
+const { inferirModoOperacional } = require('../utils/preparationMode');
 
 const router = express.Router();
 
@@ -19,9 +20,10 @@ const recalcularReceitasAfetadas = async (produtoId) => {
 
   for (const recipe of recipes) {
     const custoAntigo = Number(recipe.custoUnitario || 0);
+    const modoOperacional = inferirModoOperacional(recipe.produtoId);
+    if (!modoOperacional) continue;
     const resultado = await calcularCustoDaFichaTecnica(recipe.ingredientes);
-    const tipoProduto = recipe.produtoId?.tipoProduto || (recipe.produtoId?.aFazer ? 'coz' : 'producao');
-    const rendimento = tipoProduto === 'coz' ? 1 : Number(recipe.rendimento || 1);
+    const rendimento = modoOperacional === 'sob_demanda' ? 1 : Number(recipe.rendimento || 1);
     const disponivel = resultado.fonte === 'insumo';
     const custoInsumosTotal = disponivel ? Number(resultado.custoTotal) : 0;
     const custoUnitario = disponivel ? custoInsumosTotal / rendimento : 0;

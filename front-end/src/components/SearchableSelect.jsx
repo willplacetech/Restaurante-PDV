@@ -1,23 +1,24 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 
 const SearchableSelect = ({
   label,
-  options,
+  options = [],
   value,
   onChange,
-  placeholder = 'Selecionar',
-  searchPlaceholder = 'Buscar...',
+  placeholder = 'Buscar...',
+  searchPlaceholder = placeholder,
   disabled,
   className,
 }) => {
-  const [search, setSearch] = useState('');
+  const [searchState, setSearchState] = useState(() => ({ value, search: '' }));
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
+  const search = Object.is(searchState.value, value) ? searchState.search : '';
+  const updateSearch = (nextSearch) => setSearchState({ value, search: nextSearch });
 
   const filteredOptions = options.filter(
-    (option) =>
-      option.label.toLowerCase().includes(search.toLowerCase()) ||
-      option.value.toString().toLowerCase().includes(search.toLowerCase())
+    (option) => String(option.label ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      String(option.value ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleKeyDown = (event) => {
@@ -34,10 +35,6 @@ const SearchableSelect = ({
     }
   };
 
-  useEffect(() => {
-    setSearch('');
-  }, [value]);
-
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
@@ -49,8 +46,13 @@ const SearchableSelect = ({
           type="text"
           placeholder={searchPlaceholder}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => updateSearch(e.target.value)}
+          onFocus={() => !disabled && setOpen(true)}
           onKeyDown={handleKeyDown}
+          disabled={disabled}
+          role="combobox"
+          aria-expanded={open}
+          aria-autocomplete="list"
           style={{
             padding: '6px 10px',
             border: '1px solid var(--border-light)',
@@ -80,14 +82,21 @@ const SearchableSelect = ({
             ? filteredOptions.map((option) => (
                 <div
                   key={option.value}
+                  role="option"
+                  aria-selected={Object.is(option.value, value)}
+                  aria-disabled={disabled}
                   style={{
                     padding: '6px 10px',
-                    cursor: 'pointer',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
                     borderBottom: '1px solid var(--border-light)',
                     color: 'var(--text-primary)',
-                  }
-                  onClick={() => onChange(option.value)}
-                  onMouseOver={() => {}}
+                  }}
+                  onClick={() => {
+                    if (disabled) return;
+                    onChange(option.value);
+                    updateSearch('');
+                    setOpen(false);
+                  }}
                 >
                   {option.label}
                 </div>
@@ -100,8 +109,8 @@ const SearchableSelect = ({
                   fontStyle: 'italic',
                 }}
               >
-                Nenhum resultado encontrado
-              }
+                  Nenhum resultado encontrado
+          </div>
           }
         </div>
       )}

@@ -35,6 +35,7 @@ Status values: `existing`, `partial`, `missing`, `incompatible`,
 | UI-02 | Frontend integration/style | Preserve Restaurante brand and visual tokens while porting behavior | Restaurante `front-end/src/styles/theme.css`; `src/index.css`; `src/App.css`; source visual tokens remain the design authority | Same destination style files; no style transfer is part of parity implementation | partial | Local visual tokens/assets and accessibility | Visual review confirms no Cafe theme, palette, logo, or assets were copied | Integracao/qualidade |
 | Q-01 | Tests/quality | Backend, frontend unit, integration, and E2E regression coverage | Café root/backend/frontend scripts and focused suites including auth, payment, delivery, pagination, offline and printing | `back-end/tests/integration/api.test.js`; backend unit/tests; Cypress `front-end/tests/e2e`; baseline: 51/53 Jest, build failed, lint 214 errors/11 warnings, Cypress did not run assertions | partial | CI scripts, local services and test data fixtures | All domain acceptance tests pass; baseline failures separated from regressions | Integracao/qualidade |
 | C-01 | Config/CI/docs | Secure config, CI gates, migration and operational documentation | `README.md`; `.github/workflows`; `back-end/.env.example`; `front-end/README.md` | `README.md`; `.github/workflows/testes.yml`; `.env.example`; `back-end/.env.example` | partial | Environment variables, nonsecret fixtures, build/test scripts, deployment checks | CI validates build/lint/tests without secrets; docs explain migrations, offline, printing, rollback and readiness | Integracao/qualidade |
+| X-01 | Out of scope | Independent tools/services stored alongside the primary PDV application | `scripts/deliverylink-hub-template/` and other separately deployed products in the reference repository | No corresponding core-PDV migration requirement | out-of-scope | Product boundary from the approved spec | Verify selected code is mounted/used by the primary application before adding it to scope | Integracao/qualidade |
 
 ## Review Focus evidence
 
@@ -48,24 +49,25 @@ Status values: `existing`, `partial`, `missing`, `incompatible`,
 
 ## Follow-up plan ownership and dependencies
 
-These are proposed ownership boundaries, not a delegation claim. Exact file
-lists must be refined against each domain's matrix rows before launching
-parallel implementation work. Shared files must have one owner at a time.
+These are proposed first-pass ownership boundaries, not a delegation claim.
+The named files have one mutable owner. A newly discovered shared file must
+be assigned to one owner or routed through the integration owner before
+parallel implementation begins.
 
-| Plan | Matrix rows | Exclusive first-pass ownership | Dependencies |
+| Plan | Matrix rows | Exclusive first-pass ownership in Restaurante-PDV | Dependencies |
 |---|---|---|---|
-| Baseline and matrix (this plan) | B-01, all rows | `docs/superpowers/parity-baseline.md`; `docs/superpowers/parity-matrix.md` | None |
-| `2026-10-22-pdv-cafe-parity-data-preparacao-plan.md` | D-01, D-02, P-01, P-02 | Product/recipe model migration, compatibility tests, preparation UI/normalization files listed in those rows | Baseline and matrix |
-| `2026-10-22-pdv-cafe-parity-auth-auditoria-plan.md` | A-01, A-02 | Auth/session model, auth middleware/routes, audit service/tests | Baseline and matrix |
-| `2026-10-22-pdv-cafe-parity-vendas-estoque-financeiro-plan.md` | F-01, F-02, F-03 | Finance-operation utility/model, order/comanda/stock routes and focused tests | Data contract; auth policy |
-| `2026-10-22-pdv-cafe-parity-delivery-plan.md` | L-01, L-02 | Delivery model/routes/API/screens and delivery tests | Auth and order/payment contracts |
-| `2026-10-22-pdv-cafe-parity-pwa-offline-plan.md` | O-01, O-02 | Offline store, session client integration, queue hook/service worker and offline tests | Auth/session contract; idempotent financial API |
-| `2026-10-22-pdv-cafe-parity-impressao-plan.md` | I-01, I-02 | Printer service, printer UI, local print queue and tests | Stable order/comanda receipt payload |
-| `2026-10-22-pdv-cafe-parity-dashboard-paginacao-plan.md` | R-01, R-02 | Dashboard aggregation, pagination utility/API/client controls and tests | Stable data/API contracts |
-| `2026-10-22-pdv-cafe-parity-integracao-qualidade-plan.md` | UI-01, UI-02, Q-01, C-01 | Route composition, CI, docs, cross-domain smoke/E2E; integrate shared files after domain owners merge | All domain contracts and implementation plans |
+| Baseline and matrix (this plan) | B-01, all rows | `docs/superpowers/parity-baseline.md`; `docs/superpowers/parity-matrix.md`; `docs/superpowers/plans/2026-10-22-pdv-cafe-parity-baseline-plan.md` | None |
+| `2026-10-22-pdv-cafe-parity-data-preparacao-plan.md` | D-01, D-02, P-01, P-02 | `back-end/models/Product.js`, `Recipe.js`; `back-end/routes/products.js`, `production.js`; `back-end/utils/produtoTipo.js`, `filaCusto.js`; `front-end/src/pages/Products.jsx`, `FichasTecnicas.jsx`, `Production.jsx`; focused product/recipe tests. New migration/report files only as specified by its plan. | Baseline/matrix; provide a documented preparation mode contract to sales and production consumers. |
+| `2026-10-22-pdv-cafe-parity-auth-auditoria-plan.md` | A-01, A-02 | `back-end/models/User.js`; new `models/AuthSession.js`; `back-end/middleware/auth.js`, `exigirAutorizacao.js`; `back-end/routes/auth.js`, `auditoria.js`; `back-end/services/auditLog.js`; new `back-end/utils/authSessions.js`; `front-end/src/context/AuthContext.jsx`, `pages/Login.jsx`, `pages/Users.jsx`; focused auth/audit tests. | Baseline/matrix; expose stable user/session and authorization behavior for delivery and offline consumers. |
+| `2026-10-22-pdv-cafe-parity-vendas-estoque-financeiro-plan.md` | F-01, F-02, F-03 | `back-end/models/Order.js`, `Comanda.js`, `StockMovement.js`; new `models/OperacaoFinanceira.js`; `back-end/routes/orders.js`, `comandas.js`, `caixa.js`, `vendas.js`, `contas-receber.js`, `despesas.js`; `back-end/utils/caixa.js`, `estoqueProduto.js`, `taxasCartao.js`; `front-end/src/pages/PDV.jsx`, `Comandas.jsx`, `Caixa.jsx`, `ContasReceber.jsx`, `Financeiro.jsx`, `Orders.jsx`; focused financial/stock tests. | Baseline/matrix and data/preparation mode contract; deliver idempotent order/payment APIs to offline and printing consumers. |
+| `2026-10-22-pdv-cafe-parity-delivery-plan.md` | L-01, L-02 | `back-end/models/DeliveryOrder.js`, `DeliverySettings.js`, `Entregador.js`; `back-end/routes/delivery.js`; `front-end/src/services/deliveryApi.js`; `front-end/src/pages/DeliveryAdmin.jsx`, `DeliveryEntry.jsx`, `EntregadorDashboard.jsx`, `Entregas.jsx`; delivery-focused tests. Do not edit shared `Order.js`; request integration-owner coordination if required. | Baseline/matrix and auth plus order/payment contracts. |
+| `2026-10-22-pdv-cafe-parity-pwa-offline-plan.md` | O-01, O-02 | `front-end/src/service-worker.js`, `src/hooks/useFilaOffline.js`; new `front-end/src/services/offlineStore.js`; offline-focused tests. Do not edit shared `services/api.jsx` or `AuthContext.jsx`; consume their documented contracts. | Baseline/matrix, auth identity behavior, and idempotent sales contract. |
+| `2026-10-22-pdv-cafe-parity-impressao-plan.md` | I-01, I-02 | `front-end/src/pages/Impressoras.jsx`; new `front-end/src/components/Impressao/ImpressoraManager.jsx`, `src/services/impressaoService.js`; printer-focused tests. Do not edit `App.jsx` or shared sale pages; request integration-owner coordination. | Baseline/matrix and stable confirmed-sale receipt payload. |
+| `2026-10-22-pdv-cafe-parity-dashboard-paginacao-plan.md` | R-01, R-02 | `back-end/routes/dashboard.js`; new `back-end/utils/pagination.js`; `front-end/src/pages/Dashboard.jsx`, `src/components/DashboardTabs.jsx`; new `src/hooks/usePagination.js`, `useUrlPagination.js`, `src/components/Paginacao.jsx`; dashboard/pagination tests. | Baseline/matrix and stable data/API contracts. |
+| `2026-10-22-pdv-cafe-parity-integracao-qualidade-plan.md` | UI-01, UI-02, Q-01, C-01 | `back-end/server.js`; `front-end/src/App.jsx`, `services/api.jsx`, `components/Layout.jsx`, `styles/theme.css`, `index.css`, `App.css`; root/front/back package scripts, `.github/workflows/testes.yml`, `README.md`; cross-domain E2E and final verification. | All domain contracts and individually reviewed domain changes; owns cross-domain shared files and final integration. |
 
-External agent control status: this session exposed no task/message integration
-for Kilo Code or Codex. Do not report work assigned to either unless a tool
-later provides an observable acceptance/result. A Copilot subagent can be
-considered only where its assigned files do not overlap and after execution
-method is explicitly established.
+External agent control status (2026-10-22): session listing and messaging are
+available, but no accessible Kilo Code or Codex chat was present. The only
+other visible project session is an unrelated Copilot CLI worktree, so it was
+not reused. Copilot subagents are running on separate file boundaries; no
+work is attributed to Kilo Code or Codex.

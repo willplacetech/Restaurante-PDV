@@ -14,6 +14,7 @@ const { calcularResumoCompleto, calcularCustoUnitarioBase, calcularEstoqueMinimo
 const { normalizarDescontos } = require('../utils/descontosQuantidade');
 const { UNIDADES_PERMITIDAS, normalizarUnidade, casasDecimaisValidas } = require('../utils/unidades');
 const { enfileirarRecalculoPorInsumo } = require('../utils/filaCusto');
+const { descreverTipoPreparacao, inferirModoOperacional, resolverTipoProdutoVenda: resolverTipoVenda } = require('../utils/preparationMode');
 
 const router = express.Router();
 const units = UNIDADES_PERMITIDAS;
@@ -31,9 +32,8 @@ const camposCustoCalculado = (resultado, divisor = 1) => {
   };
 };
 const dataLocal = () => { const agora = new Date(); return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`; };
-const resolverTipoProdutoVenda = (data = {}) => data.tipoProduto || (data.aFazer ? 'coz' : data.producaoPropria ? 'producao' : 'revenda');
 const disponibilidadeCoz = (produto) => {
-  if (!produto.aFazer) return null;
+  if (inferirModoOperacional(produto) !== 'sob_demanda') return null;
   const ingredientes = (produto.fichaTecnica || []).filter((item) => item.produtoId && Number(item.quantidade) > 0);
   const limites = ingredientes.map((item) => Math.floor(estoqueTotalBase(item.produtoId) / paraBase(item.quantidade, item.unidade)));
   const faltantes = ingredientes.filter((item, indice) => limites[indice] < 1).map((item) => item.produtoId.nome);
@@ -84,7 +84,8 @@ const validations = [
   body('unidadePeso').optional().isIn(['kg']),
   body('vendidoFracionado').optional().isBoolean(),
   body('aFazer').optional().isBoolean(),
-  body('tipoProduto').optional().isIn(['revenda', 'coz', 'producao']),
+  body('tipoProduto').optional().isIn(['revenda', 'coz', 'producao', 'preparacao']),
+  body('modoOperacional').optional().isIn(['sob_demanda', 'lote']),
   body('rendimentoPorReceita').optional().isFloat({ min: 0.001 }),
   body('permitirVendaSemInsumo').optional().isBoolean(),
   body('producaoPropria').optional().isBoolean(),
@@ -106,7 +107,7 @@ router.get('/', auth, auth.allowRoles('admin', 'operador', 'garcom', 'cozinha'),
       ...produto.toObject(),
       ...(produto.tipo === 'insumo' && produto.unidadeCompra ? { unidadeVenda: produto.unidadeCompra } : {}),
       ...dadosEstoqueProduto(produto),
-      tipoProduto: produto.tipo === 'venda' ? (produto.tipoProduto || (produto.aFazer ? 'coz' : produto.producaoPropria ? 'producao' : 'revenda')) : null,
+      ...(produto.tipo === 'venda' ? descreverTipoPreparacao(produto) : { tipoProduto: null, modoOperacional: null, preparacaoPendente: false }),
       receitaId: receitaPorProduto.get(String(produto._id)) || null,
       temReceita: receitaPorProduto.has(String(produto._id)),
        resumoInsumo: produto.tipo === 'insumo' ? calcularResumoCompleto(produto) : null,
@@ -123,10 +124,11 @@ router.get('/pdv', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (
         { tipo: { $exists: false }, controladoComoInsumo: { $ne: true } },
       ],
     }).populate('fichaTecnica.produtoId', 'nome tipo unidadeCompra unidadeConteudo conteudoPorEmbalagem estoqueEmbalagens estoqueInsumos estoqueConteudoAberto precoCompra').sort({ nome: 1 });
-    res.json(produtos.map((produto) => ({
+    res.json(produtos.filter((produto) => !descreverTipoPreparacao(produto).preparacaoPendente).map((produto) => ({
       ...produto.toObject(),
       tipo: resolverTipoProduto(produto),
       ...dadosEstoqueProduto(produto),
+      ...descreverTipoPreparacao(produto),
       cozDisponibilidade: disponibilidadeCoz(produto),
     })));
   } catch (err) { res.status(500).json({ msg: err.message }); }
@@ -202,12 +204,15 @@ router.post('/migracoes/normalizar-registros-legados', auth, auth.allowRoles('ad
         { tipoProduto: { $in: [null, ''] } },
         { aFazer: { $exists: false } },
         { producaoPropria: { $exists: false } },
+        { tipoProduto: { $in: ['coz', 'producao'] }, modoOperacional: { $exists: false } },
         { estoqueMinimo: { $lt: 0 } },
         { estoqueMinimo: null },
       ],
     });
 
     let corrigidos = 0;
+    let preparacoesConvertidas = 0;
+    const pendentesResolucao = [];
 
     for (const produto of produtos) {
       const tipoPadrao = produto.controladoComoInsumo || produto.usavelEmReceita || produto.tipo === 'insumo' ? 'insumo' : 'venda';
@@ -225,10 +230,20 @@ router.post('/migracoes/normalizar-registros-legados', auth, auth.allowRoles('ad
           produto.estoqueEmbalagens = Number(produto.estoqueInsumos || 0);
         }
       } else {
-        const tipoProdutoAtual = produto.tipoProduto || (produto.aFazer ? 'coz' : produto.producaoPropria ? 'producao' : 'revenda');
-        produto.tipoProduto = tipoProdutoAtual;
-        produto.aFazer = tipoProdutoAtual === 'coz';
-        produto.producaoPropria = tipoProdutoAtual === 'producao';
+        const descricao = resolverTipoVenda(produto);
+        if (descricao?.tipoProduto === 'preparacao') {
+          produto.tipoProduto = 'preparacao';
+          produto.modoOperacional = descricao.modoOperacional;
+          produto.aFazer = descricao.modoOperacional === 'sob_demanda';
+          produto.producaoPropria = descricao.modoOperacional === 'lote';
+          preparacoesConvertidas += 1;
+        } else if (descricao?.tipoProduto === 'revenda') {
+          produto.tipoProduto = 'revenda';
+          produto.aFazer = false;
+          produto.producaoPropria = false;
+        } else {
+          pendentesResolucao.push({ id: String(produto._id), nome: produto.nome, motivo: 'Os campos legados não determinam se é revenda, sob demanda ou lote.' });
+        }
         produto.estoqueMinimo = Number(produto.estoqueMinimo || 0);
       }
 
@@ -244,7 +259,14 @@ router.post('/migracoes/normalizar-registros-legados', auth, auth.allowRoles('ad
       corrigidos += 1;
     }
 
-    res.json({ msg: 'Registros legados normalizados com sucesso.', produtosCorrigidos: corrigidos });
+    const semModo = await Product.find({ tipo: 'venda', modoOperacional: { $exists: false } }).select('_id nome tipoProduto aFazer producaoPropria').lean();
+    const pendentesIds = new Set(pendentesResolucao.map((produto) => produto.id));
+    semModo.forEach((produto) => {
+      if (!resolverTipoVenda(produto) && !pendentesIds.has(String(produto._id))) {
+        pendentesResolucao.push({ id: String(produto._id), nome: produto.nome, motivo: 'Os campos legados não determinam se é revenda, sob demanda ou lote.' });
+      }
+    });
+    res.json({ msg: 'Registros legados normalizados; produtos ambíguos preservados para resolução explícita.', produtosCorrigidos: corrigidos, preparacoesConvertidas, pendentesResolucao });
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }
@@ -321,7 +343,7 @@ router.get('/:id', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ msg: 'Produto não encontrado' });
-    res.json({ ...product.toObject(), ...dadosEstoqueProduto(product), resumoInsumo: product.tipo === 'insumo' ? calcularResumoCompleto(product) : null });
+    res.json({ ...product.toObject(), ...descreverTipoPreparacao(product), ...dadosEstoqueProduto(product), resumoInsumo: product.tipo === 'insumo' ? calcularResumoCompleto(product) : null });
   } catch (_) { res.status(404).json({ msg: 'Produto não encontrado' }); }
 });
 
@@ -334,13 +356,17 @@ router.post('/', auth, auth.allowRoles('admin'), validations, async (req, res) =
   try {
     const data = req.body;
     const tipo = resolverTipoProduto(data);
-    const tipoProduto = tipo === 'venda' ? resolverTipoProdutoVenda(data) : null;
+    const descricaoTipoProduto = tipo === 'venda' ? resolverTipoVenda(data, true) : null;
+    if (tipo === 'venda' && !descricaoTipoProduto) return res.status(400).json({ msg: 'Classificação ambígua. Informe Preparação com modo operacional ou Revenda.' });
+    const tipoProduto = descricaoTipoProduto?.tipoProduto || null;
+    const modoOperacional = descricaoTipoProduto?.modoOperacional || null;
+    if (tipoProduto === 'preparacao' && !modoOperacional) return res.status(400).json({ msg: 'Informe o modo operacional da Preparação: sob demanda ou lote.' });
     if (tipo === 'venda' && (data.precoVenda == null && data.preco == null)) return res.status(400).json({ msg: 'Preço de venda é obrigatório para produtos à venda' });
     if ((tipo === 'insumo' || data.usavelEmReceita === true) && (data.precoCompra === undefined || Number(data.precoCompra) < 0)) return res.status(400).json({ msg: 'Preço de compra inválido' });
     if (data.usavelEmReceita === true && (!Number.isFinite(Number(data.conteudoPorEmbalagem)) || Number(data.conteudoPorEmbalagem) < 0)) return res.status(400).json({ msg: 'Conteúdo por embalagem inválido' });
     const exists = await Product.findOne({ codigo: { $regex: new RegExp(`^${data.codigo.trim()}$`, 'i') } });
     if (exists) return res.status(400).json({ msg: 'Já existe um produto com este código' });
-    const estoque = tipoProduto === 'coz' ? 0 : toNumberOrZero(data.estoque);
+    const estoque = modoOperacional === 'sob_demanda' ? 0 : toNumberOrZero(data.estoque);
     const estoqueInsumos = toNumberOrZero(data.estoqueInsumos);
     const fichaTecnica = Array.isArray(data.fichaTecnica) ? data.fichaTecnica.map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidade), unidade: item.unidade })).filter((item) => item.produtoId && Number.isFinite(item.quantidade) && item.quantidade > 0 && units.includes(item.unidade)) : [];
     const custoUnitario = toNumberOrZero(data.custoUnitario ?? data.custo);
@@ -401,12 +427,13 @@ router.post('/', auth, auth.allowRoles('admin'), validations, async (req, res) =
       pesoPorUnidade,
       unidadePeso: data.unidadePeso || 'kg',
       vendidoFracionado: Boolean(data.vendidoFracionado),
-      aFazer: tipoProduto === 'coz',
+      aFazer: modoOperacional === 'sob_demanda',
       permitirVendaSemInsumo: Boolean(data.permitirVendaSemInsumo),
       fichaTecnica,
-      producaoPropria: tipoProduto === 'producao',
+      producaoPropria: modoOperacional === 'lote',
       tipoProduto,
-      rendimentoPorReceita: tipoProduto === 'producao' ? Number(data.rendimentoPorReceita || 1) : 1,
+      modoOperacional,
+      rendimentoPorReceita: modoOperacional === 'lote' ? Number(data.rendimentoPorReceita || 1) : 1,
       usavelEmReceita: tipo === 'insumo' || Boolean(data.usavelEmReceita),
       ativo: data.ativo !== undefined ? Boolean(data.ativo) : true,
       createdBy: req.user.id,
@@ -431,15 +458,19 @@ router.post('/', auth, auth.allowRoles('admin'), validations, async (req, res) =
   }
 });
 
-router.put('/:id', auth, auth.allowRoles('admin'), [body('codigo').optional().trim().notEmpty(), body('nome').optional().trim().notEmpty(), body('preco').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoque').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueEmbalagens').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueConteudoAberto').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueMinimoEmbalagens').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('unidade').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade deve ser kg, L ou un'), body('quantidade').optional().custom((value, { req }) => casasDecimaisValidas(value, req.body.unidade)).withMessage('Quantidade inválida para a unidade selecionada'), body('rendimento').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0.01 }), body('unidadeConteudo').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade do conteúdo deve ser kg, L ou un'), body('estoqueMaximo').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0.001 }), body('unidadeVenda').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade de venda deve ser kg, L ou un'), body('unidadeCompra').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade de compra deve ser kg, L ou un'), body('pesoPorUnidade').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('unidadePeso').optional().isIn(['kg']).withMessage('Unidade de peso deve ser kg'), body('vendidoFracionado').optional().isBoolean(), body('aFazer').optional().isBoolean(), body('tipoProduto').optional().isIn(['revenda', 'coz', 'producao']), body('rendimentoPorReceita').optional().isFloat({ min: 0.001 }), body('permitirVendaSemInsumo').optional().isBoolean(), body('fichaTecnica').optional().isArray()], async (req, res) => {
+router.put('/:id', auth, auth.allowRoles('admin'), [body('codigo').optional().trim().notEmpty(), body('nome').optional().trim().notEmpty(), body('preco').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoque').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueEmbalagens').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueConteudoAberto').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('estoqueMinimoEmbalagens').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('unidade').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade deve ser kg, L ou un'), body('quantidade').optional().custom((value, { req }) => casasDecimaisValidas(value, req.body.unidade)).withMessage('Quantidade inválida para a unidade selecionada'), body('rendimento').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0.01 }), body('unidadeConteudo').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade do conteúdo deve ser kg, L ou un'), body('estoqueMaximo').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0.001 }), body('unidadeVenda').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade de venda deve ser kg, L ou un'), body('unidadeCompra').optional().customSanitizer(normalizarUnidade).custom((value) => units.includes(value)).withMessage('Unidade de compra deve ser kg, L ou un'), body('pesoPorUnidade').customSanitizer(limparCampoOpcional).optional().isFloat({ min: 0 }), body('unidadePeso').optional().isIn(['kg']).withMessage('Unidade de peso deve ser kg'), body('vendidoFracionado').optional().isBoolean(), body('aFazer').optional().isBoolean(), body('producaoPropria').optional().isBoolean(), body('tipoProduto').optional().isIn(['revenda', 'coz', 'producao', 'preparacao']), body('modoOperacional').optional().isIn(['sob_demanda', 'lote']), body('rendimentoPorReceita').optional().isFloat({ min: 0.001 }), body('permitirVendaSemInsumo').optional().isBoolean(), body('fichaTecnica').optional().isArray()], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
     const data = req.body;
-    const produtoAtual = await Product.findById(req.params.id).select('tipo usavelEmReceita aFazer fichaTecnica tipoProduto producaoPropria estoque codigo custoCalculado custo custoUnitario precoCompra conteudoPorEmbalagem unidadeConteudo unidadeCompra unidadeVenda');
+    const produtoAtual = await Product.findById(req.params.id).select('tipo usavelEmReceita aFazer fichaTecnica tipoProduto modoOperacional producaoPropria rendimentoPorReceita estoque codigo custoCalculado custo custoUnitario precoCompra conteudoPorEmbalagem unidadeConteudo unidadeCompra unidadeVenda');
     if (!produtoAtual) return res.status(404).json({ msg: 'Produto não encontrado' });
     const tipo = resolverTipoProduto({ ...data, tipo: data.tipo ?? undefined });
-    const tipoProduto = tipo === 'venda' ? resolverTipoProdutoVenda({ ...produtoAtual.toObject(), ...data }) : null;
+    const classificacaoAlterada = ['tipoProduto', 'modoOperacional', 'aFazer', 'producaoPropria'].some((key) => data[key] !== undefined);
+    const descricaoTipoProduto = tipo === 'venda' ? resolverTipoVenda({ ...produtoAtual.toObject(), ...data }) : null;
+    if (tipo === 'venda' && classificacaoAlterada && !descricaoTipoProduto) return res.status(400).json({ msg: 'Classificação ambígua. Informe Preparação com modo operacional ou Revenda.' });
+    if (tipo === 'venda' && classificacaoAlterada && descricaoTipoProduto.tipoProduto === 'preparacao' && !descricaoTipoProduto.modoOperacional) return res.status(400).json({ msg: 'Informe o modo operacional da Preparação: sob demanda ou lote.' });
+    const tipoProduto = descricaoTipoProduto?.tipoProduto || null;
     if (data.codigo !== undefined && String(data.codigo).trim() !== String(produtoAtual.codigo).trim()) {
       return res.status(403).json({ msg: 'Código do produto não pode ser alterado.' });
     }
@@ -452,6 +483,16 @@ router.put('/:id', auth, auth.allowRoles('admin'), [body('codigo').optional().tr
     const rendimentoPorUnidadeCompra = Number(data.rendimentoPorUnidadeCompra ?? produtoAtual.rendimentoPorUnidadeCompra ?? 0);
     const deveAplicarConversao = tipo === 'venda' && rendimentoPorUnidadeCompra > 1 && unidadeCompra !== unidadeVenda;
     const fields = {};
+    const unsetFields = {};
+    if (classificacaoAlterada && tipo === 'venda') {
+      fields.tipoProduto = tipoProduto;
+      fields.aFazer = descricaoTipoProduto.modoOperacional === 'sob_demanda';
+      fields.producaoPropria = descricaoTipoProduto.modoOperacional === 'lote';
+      if (descricaoTipoProduto.modoOperacional) fields.modoOperacional = descricaoTipoProduto.modoOperacional;
+      else unsetFields.modoOperacional = 1;
+      if (descricaoTipoProduto.modoOperacional === 'sob_demanda') fields.estoque = 0;
+    }
+    if (data.rendimentoPorReceita !== undefined) fields.rendimentoPorReceita = Number(data.rendimentoPorReceita);
     if (data.tipo !== undefined) fields.tipo = tipo;
     if (data.usavelEmReceita !== undefined) fields.usavelEmReceita = Boolean(data.usavelEmReceita);
     ['nome', 'categoria'].forEach((key) => { if (data[key] !== undefined) fields[key] = String(data[key]).trim(); });
@@ -504,12 +545,7 @@ router.put('/:id', auth, auth.allowRoles('admin'), [body('codigo').optional().tr
     const descontosPorQuantidade = descontosDoProduto(data.descontosPorQuantidade, tipo, precoNormal);
     if (descontosPorQuantidade !== undefined) fields.descontosPorQuantidade = descontosPorQuantidade;
     ['vendidoFracionado', 'permitirVendaSemInsumo'].forEach((key) => { if (data[key] !== undefined) fields[key] = Boolean(data[key]); });
-    if (tipo === 'venda' && (data.tipoProduto !== undefined || data.aFazer !== undefined || data.producaoPropria !== undefined)) {
-      fields.tipoProduto = tipoProduto;
-      fields.aFazer = tipoProduto === 'coz';
-      fields.producaoPropria = tipoProduto === 'producao';
-      fields.estoque = tipoProduto === 'coz' ? 0 : toNumberOrZero(data.estoque ?? produtoAtual.estoque);
-    }
+    if (classificacaoAlterada && tipo === 'venda' && descricaoTipoProduto.modoOperacional === 'sob_demanda') fields.rendimentoPorReceita = 1;
     if (data.rendimentoPorReceita !== undefined) fields.rendimentoPorReceita = toNumberOrZero(data.rendimentoPorReceita);
     if (data.fichaTecnica !== undefined) fields.fichaTecnica = data.fichaTecnica.map((item) => ({ produtoId: item.produtoId, quantidade: toNumberOrZero(item.quantidade), unidade: item.unidade }));
     const fichaTecnicaAlterada = data.fichaTecnica !== undefined;
@@ -558,11 +594,11 @@ router.put('/:id', auth, auth.allowRoles('admin'), [body('codigo').optional().tr
       return res.status(409).json({ msg: 'Divergência de custo detectada', divergencia: divergenciaAviso, requireConfirmation: true });
     }
 
-    const product = await Product.findByIdAndUpdate(req.params.id, { $set: { ...fields, ...custoRecalculado } }, { new: true, runValidators: true });
+    const product = await Product.findByIdAndUpdate(req.params.id, { $set: { ...fields, ...custoRecalculado }, ...(Object.keys(unsetFields).length ? { $unset: unsetFields } : {}) }, { new: true, runValidators: true });
     if (!product) return res.status(404).json({ msg: 'Produto não encontrado' });
     if (tipo === 'insumo' && data.precoCompra !== undefined) enfileirarRecalculoPorInsumo(product._id);
     
-    res.json({ ...product.toObject(), ...dadosEstoqueProduto(product), resumoInsumo: product.tipo === 'insumo' ? calcularResumoCompleto(product) : null });
+    res.json({ ...product.toObject(), ...(product.tipo === 'venda' ? descreverTipoPreparacao(product) : {}), ...dadosEstoqueProduto(product), resumoInsumo: product.tipo === 'insumo' ? calcularResumoCompleto(product) : null });
   } catch (err) { res.status(400).json({ msg: err.message }); }
 });
 

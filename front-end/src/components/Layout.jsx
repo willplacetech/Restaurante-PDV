@@ -211,7 +211,7 @@ const visibleGroups = () => {
           if (item.gerente) return userRole !== 'garcom' && userRole !== 'operador';
           return true;
         }),
-      })
+      }))
       .filter((grupo) => grupo.items.length > 0);
   };
 

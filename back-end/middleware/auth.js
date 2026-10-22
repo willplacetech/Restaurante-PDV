@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const jwtSecret = process.env.JWT_SECRET || 'desenvolvimento-altere-esta-chave';
+const AuthSession = require('../models/AuthSession');
+const jwtSecret = process.env.JWT_SECRET || 'restaurante-pdv-secret-key';
 
 const auth = async (req, res, next) => {
   const token = req.headers.authorization?.startsWith('Bearer ')
@@ -11,9 +12,22 @@ const auth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, jwtSecret);
-    const user = await User.findById(decoded.id || decoded._id || decoded.usuarioId).select('+password');
+    const user = await User.findById(decoded.id || decoded._id || decoded.usuarioId);
     if (!user) return res.status(401).json({ msg: 'Usuário não encontrado' });
-    if (user.active === false) return res.status(403).json({ msg: 'Usuário inativo' });
+    if (user.active === false || user.archivedAt) return res.status(403).json({ msg: 'Usuário inativo' });
+    if ((decoded.authVersion ?? 0) !== (user.authVersion ?? 0)) {
+      return res.status(401).json({ msg: 'Sessão revogada' });
+    }
+    if (decoded.sessionId) {
+      const session = await AuthSession.findOne({
+        _id: decoded.sessionId,
+        userId: user._id,
+        revokedAt: null,
+        expiresAt: { $gt: new Date() },
+      });
+      if (!session) return res.status(401).json({ msg: 'Sessão revogada' });
+      req.authSessionId = decoded.sessionId;
+    }
     req.user = user;
     next();
   } catch (_) {
@@ -26,6 +40,6 @@ auth.allowRoles = (...roles) => (req, res, next) => {
   next();
 };
 
-auth.adminOnly = auth.allowRoles('admin');
+auth.adminOnly = (req, res, next) => auth(req, res, () => auth.allowRoles('admin')(req, res, next));
 
 module.exports = auth;

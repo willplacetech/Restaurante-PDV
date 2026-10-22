@@ -1,9 +1,8 @@
-import { useContext, useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useContext, useEffect, useMemo, useState } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { AuthContext } from '../context/AuthContextDefinition.jsx';
-import NoveltiesModal from '../components/NoveltiesModal.jsx';
 import NoveltiesModal from '../components/NoveltiesModal.jsx';
 import { buildNotaVendaHtml, compartilharNotaWhatsApp } from '../utils/notaVenda.js';
 import DashboardInsights from '../components/DashboardInsights.jsx';
@@ -11,12 +10,26 @@ import DashboardTabs from '../components/DashboardTabs.jsx';
 import ProductSalesHistory from '../components/ProductSalesHistory.jsx';
 import DateInput from '../components/DateInput.jsx';
 import AreaTabs from '../components/AreaTabs.jsx';
+import Paginacao from '../components/Paginacao.jsx';
+import usePagination from '../hooks/usePagination.js';
+import useUrlPagination from '../hooks/useUrlPagination.js';
 
 const money = (value) => `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const quantidadeComDuasCasas = (value) => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const labels = { dia: 'Hoje', semana: 'Esta semana', mes: 'Este mês' };
 const paymentLabels = { dinheiro: 'Dinheiro', pix: 'Pix', credito_loja: 'Credito na loja', cartao_credito: 'Cartao de credito', cartao_debito: 'Cartao de debito' };
 const statusLabels = { aberta: 'Aberta', fechada: 'Fechada', cancelada: 'Cancelada' };
+const dataInicioSemana = (semanasAtras = 0) => {
+  const data = new Date();
+  const diasDesdeSegunda = (data.getDay() + 6) % 7;
+  data.setDate(data.getDate() - diasDesdeSegunda - (semanasAtras * 7));
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+};
+const dataLocalISO = (data = new Date()) => `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+const filtrosRelatorioPadrao = () => {
+  const hoje = dataLocalISO();
+  return { dataInicio: `${hoje.slice(0, 7)}-01`, dataFim: hoje };
+};
 const calcularVariacao = (atual, anterior) => {
   const valorAtual = Number(atual || 0);
   const valorAnterior = Number(anterior || 0);
@@ -39,7 +52,17 @@ const calcularVariacao = (atual, anterior) => {
 
 export default function Dashboard() {
   const { user } = useContext(AuthContext);
-  const [data, setData] = useState(null);
+  const [searchParams] = useSearchParams();
+  const filtrosPadrao = useMemo(() => filtrosRelatorioPadrao(), []);
+  const urlPagination = useUrlPagination({ defaultFilters: filtrosPadrao });
+  const dashboardQuery = usePagination({
+    endpoint: '/dashboard',
+    page: urlPagination.page,
+    pageSize: urlPagination.pageSize,
+    filters: urlPagination.filters,
+    itemsPath: 'relatorioClientes.clientes',
+  });
+  const { data, loading: dashboardLoading, error: dashboardError, pagination: paginationData, reload } = dashboardQuery;
   const [produtos, setProdutos] = useState([]);
   const [quadrosAbertos, setQuadrosAbertos] = useState({ estoque: false, clientes: false, mensal: false, pedidos: false, comandas: false });
   const [comandas, setComandas] = useState([]);
@@ -49,40 +72,44 @@ export default function Dashboard() {
   const [comandaSelecionada, setComandaSelecionada] = useState(null);
   const [telefoneComanda, setTelefoneComanda] = useState('');
   const [nomeComanda, setNomeComanda] = useState('');
-  const [dashboardTab, setDashboardTab] = useState('vendas');
+  const dashboardTab = searchParams.get('aba') === 'producao' ? 'producao' : 'vendas';
   const [comparacaoTipo, setComparacaoTipo] = useState('mes');
   const [comparacaoMesA, setComparacaoMesA] = useState(new Date().toISOString().slice(0, 7));
   const [comparacaoMesB, setComparacaoMesB] = useState(() => { const data = new Date(); data.setMonth(data.getMonth() - 1); return data.toISOString().slice(0, 7); });
+  const [comparacaoSemanaA, setComparacaoSemanaA] = useState(() => dataInicioSemana());
   const [noveltiesOpen, setNoveltiesOpen] = useState(false);
-  const [comparacaoSemanaB, setComparacaoSemanaB] = useState(() => { const data = new Date(); data.setDate(data.getDate() - data.getDay() - 6); return data.toISOString().slice(0, 10); });
+  const [comparacaoSemanaB, setComparacaoSemanaB] = useState(() => dataInicioSemana(1));
   const [comparacaoDiaA, setComparacaoDiaA] = useState(() => new Date().toISOString().slice(0, 10));
   const [comparacaoDiaB, setComparacaoDiaB] = useState(() => { const data = new Date(); data.setDate(data.getDate() - 1); return data.toISOString().slice(0, 10); });
   const [comparacaoVendas, setComparacaoVendas] = useState(null);
   const [alertasCusto, setAlertasCusto] = useState({ semCusto: [], reajuste: [] });
   const [productionData, setProductionData] = useState(null);
-  const [taxasCartao, setTaxasCartao] = useState({ cartao_credito: '', cartao_debito: '' });
+  const [taxasCartaoOverride, setTaxasCartaoOverride] = useState(null);
   const [editandoTaxa, setEditandoTaxa] = useState({ cartao_credito: false, cartao_debito: false });
   const [salvandoTaxas, setSalvandoTaxas] = useState(false);
   const { showToast } = useToast();
+  const pagamentosIniciais = data?.relatorioMes?.pagamentos || [];
+  const taxasConfiguradas = data?.taxasCartao || {};
+  const taxasCartao = {
+    cartao_credito: taxasCartaoOverride?.cartao_credito ?? taxasConfiguradas.cartao_credito ?? pagamentosIniciais.find((pagamento) => pagamento.tipo === 'cartao_credito')?.taxaPercentual ?? '',
+    cartao_debito: taxasCartaoOverride?.cartao_debito ?? taxasConfiguradas.cartao_debito ?? pagamentosIniciais.find((pagamento) => pagamento.tipo === 'cartao_debito')?.taxaPercentual ?? '',
+  };
 
   useEffect(() => {
     if (user?.role !== 'admin') return;
-    Promise.all([api.get('/dashboard'), api.get('/products'), api.get('/comandas'), api.get('/production/dashboard'), api.get('/products/sem-custo'), api.get('/products/reajuste-recomendado')])
-      .then(([dashboardResponse, productsResponse, comandasResponse, productionResponse, semCustoResponse, reajusteResponse]) => {
-        setData(dashboardResponse.data);
+    Promise.all([api.get('/products'), api.get('/comandas'), api.get('/production/dashboard'), api.get('/products/sem-custo'), api.get('/products/reajuste-recomendado')])
+      .then(([productsResponse, comandasResponse, productionResponse, semCustoResponse, reajusteResponse]) => {
         setProdutos(productsResponse.data);
         setComandas(comandasResponse.data);
         setProductionData(productionResponse.data);
         setAlertasCusto({ semCusto: semCustoResponse.data || [], reajuste: reajusteResponse.data || [] });
-        const pagamentos = dashboardResponse.data.relatorioMes?.pagamentos || [];
-        const taxasConfiguradas = dashboardResponse.data.taxasCartao || {};
-        setTaxasCartao({
-          cartao_credito: taxasConfiguradas.cartao_credito ?? pagamentos.find((pagamento) => pagamento.tipo === 'cartao_credito')?.taxaPercentual ?? '',
-          cartao_debito: taxasConfiguradas.cartao_debito ?? pagamentos.find((pagamento) => pagamento.tipo === 'cartao_debito')?.taxaPercentual ?? '',
-        });
       })
-      .catch((error) => showToast(error.response?.data?.msg || 'Não foi possível carregar o dashboard', 'error'));
-  }, [user?.role]);
+      .catch((error) => showToast(error.response?.data?.msg || 'Não foi possível carregar os dados do dashboard', 'error'));
+  }, [showToast, user?.role]);
+
+  useEffect(() => {
+    if (dashboardError) showToast(dashboardError.response?.data?.msg || 'Não foi possível carregar o dashboard', 'error');
+  }, [dashboardError, showToast]);
 
   useEffect(() => {
     if (user?.role !== 'admin') return;
@@ -114,11 +141,11 @@ export default function Dashboard() {
 
   if (user?.role !== 'admin') return <Navigate to="/pdv" replace />;
 
-  if (!data) return <div className="dashboard-page"><div className="dashboard-loading">☕ Carregando acompanhamento...</div></div>;
+  if (!data && dashboardError) return <div className="dashboard-page"><div className="dashboard-loading">{dashboardError.response?.data?.msg || 'Não foi possível carregar o dashboard.'}</div></div>;
+  if (!data || dashboardLoading) return <div className="dashboard-page"><div className="dashboard-loading">☕ Carregando acompanhamento...</div></div>;
   const pedidosHoje = data.pedidosHoje || [];
   const vendasHoje = data.vendasHoje || { pedidos: 0, itens: 0, total: 0, recebido: 0, pendente: 0 };
   const relatorioMes = data.relatorioMes || { pedidos: 0, vendas: 0, itens: 0, total: 0, recebido: 0, pendente: 0, ticketMedio: 0, status: {}, pagamentos: [], produtos: [], clientes: 0, vendasPorDia: [] };
-  const periodos = data.periodos || { dia: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 }, semana: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 }, mes: { pedidos: 0, itens: 0, total: 0, ticketMedio: 0 } };
   const relatorioClientes = data.relatorioClientes || { periodo: '', totalCadastrados: 0, clientesComCompra: 0, totalVendido: 0, totalRecebido: 0, totalPendente: 0, clientes: [] };
   const insights = data.insights || {};
   const estoque = [...produtos].sort((a, b) => Number(a.estoque || 0) - Number(b.estoque || 0));
@@ -198,11 +225,11 @@ export default function Dashboard() {
   };
 
   const imprimirRelatorioMes = () => {
-    const pagamentos = relatorioMes.pagamentos.map((pagamento) => `<div class="linha"><span>${paymentLabels[pagamento.tipo] || pagamento.tipo}${pagamento.taxa ? ` (taxa R$ ${money(pagamento.taxa)})` : ''}</span><b>R$ ${money(pagamento.total)}</b></div>`).join('');
+    const pagamentos = pagamentosComTaxaAtual.map((pagamento) => `<div class="linha"><span>${paymentLabels[pagamento.tipo] || pagamento.tipo}${pagamento.taxa ? ` (taxa R$ ${money(pagamento.taxa)})` : ''}</span><b>R$ ${money(pagamento.total)}</b></div>`).join('');
     const produtos = relatorioMes.produtos.map((produto) => `<div class="linha"><span>${produto.quantidade}x ${produto.nome}</span><b>R$ ${money(produto.total)}</b></div>`).join('');
     const dias = relatorioMes.vendasPorDia.map((dia) => `<div class="linha"><span>${dia.dia}</span><b>R$ ${money(dia.total)}</b></div>`).join('');
     const janela = window.open('', '_blank', 'width=420,height=700');
-    janela.document.write(`<!DOCTYPE html><html><head><title>Fechamento Mensal</title><style>*{box-sizing:border-box;font-family:'Courier New',monospace;font-size:12px}body{width:76mm;margin:0;padding:4mm;color:#000}.center{text-align:center}.marca{font-size:16px;font-weight:bold}.separador{border-top:1px dashed #000;margin:8px 0}.linha{display:flex;justify-content:space-between;gap:8px;padding:3px 0}.titulo{font-weight:bold;margin:6px 0}.total{border-top:2px solid #000;padding-top:7px;margin-top:6px;font-weight:bold;font-size:14px}@media print{@page{margin:0;size:80mm auto}body{margin:4mm}}</style></head><body><div class="center marca">SABOR DE ABRACO</div><div class="center">FECHAMENTO MENSAL</div><div class="center">${relatorioMes.periodo || ''}</div><div class="separador"></div><div class="titulo">RESUMO</div><div class="linha"><span>Pedidos:</span><b>${relatorioMes.pedidos}</b></div><div class="linha"><span>Clientes:</span><b>${relatorioMes.clientes}</b></div><div class="linha"><span>Itens vendidos:</span><b>${relatorioMes.itens}</b></div><div class="linha"><span>Ticket medio:</span><b>R$ ${money(relatorioMes.ticketMedio)}</b></div><div class="linha total"><span>VENDAS:</span><b>R$ ${money(relatorioMes.total)}</b></div><div class="linha"><span>Recebido:</span><b>R$ ${money(relatorioMes.recebido)}</b></div><div class="linha"><span>A receber:</span><b>R$ ${money(relatorioMes.pendente)}</b></div><div class="separador"></div><div class="titulo">STATUS DOS PEDIDOS</div>${Object.entries(relatorioMes.status).map(([status, total]) => `<div class="linha"><span>${status}</span><b>${total}</b></div>`).join('')}<div class="separador"></div><div class="titulo">FORMAS DE PAGAMENTO</div>${pagamentos || '<div>Nenhum pagamento registrado</div>'}<div class="separador"></div><div class="titulo">PRODUTOS MAIS VENDIDOS</div>${produtos || '<div>Nenhuma venda registrada</div>'}<div class="separador"></div><div class="titulo">VENDAS POR DIA</div>${dias || '<div>Nenhuma venda registrada</div>'}<div class="separador"></div><div class="center"><b>Sabor de Abraço</b><br>Agradece a Preferência!<br>Volte sempre!</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},500)}</script></body></html>`);
+    janela.document.write(`<!DOCTYPE html><html><head><title>Relatório do período</title><style>*{box-sizing:border-box;font-family:'Courier New',monospace;font-size:12px}body{width:76mm;margin:0;padding:4mm;color:#000}.center{text-align:center}.marca{font-size:16px;font-weight:bold}.separador{border-top:1px dashed #000;margin:8px 0}.linha{display:flex;justify-content:space-between;gap:8px;padding:3px 0}.titulo{font-weight:bold;margin:6px 0}.total{border-top:2px solid #000;padding-top:7px;margin-top:6px;font-weight:bold;font-size:14px}@media print{@page{margin:0;size:80mm auto}body{margin:4mm}}</style></head><body><div class="center marca">SABOR DE ABRACO</div><div class="center">RELATÓRIO DO PERÍODO</div><div class="center">${relatorioMes.periodo || ''}</div><div class="separador"></div><div class="titulo">RESUMO</div><div class="linha"><span>Pedidos:</span><b>${relatorioMes.pedidos}</b></div><div class="linha"><span>Clientes:</span><b>${relatorioMes.clientes}</b></div><div class="linha"><span>Itens vendidos:</span><b>${relatorioMes.itens}</b></div><div class="linha"><span>Ticket médio:</span><b>R$ ${money(relatorioMes.ticketMedio)}</b></div><div class="linha total"><span>VENDAS:</span><b>R$ ${money(relatorioMes.total)}</b></div><div class="linha"><span>Recebido:</span><b>R$ ${money(relatorioMes.recebido)}</b></div><div class="linha"><span>A receber:</span><b>R$ ${money(relatorioMes.pendente)}</b></div><div class="separador"></div><div class="titulo">STATUS DOS PEDIDOS</div>${Object.entries(relatorioMes.status).map(([status, total]) => `<div class="linha"><span>${status}</span><b>${total}</b></div>`).join('')}<div class="separador"></div><div class="titulo">FORMAS DE PAGAMENTO</div>${pagamentos || '<div>Nenhum pagamento registrado</div>'}<div class="separador"></div><div class="titulo">PRODUTOS MAIS VENDIDOS</div>${produtos || '<div>Nenhuma venda registrada</div>'}<div class="separador"></div><div class="titulo">VENDAS POR DIA</div>${dias || '<div>Nenhuma venda registrada</div>'}<div class="separador"></div><div class="center"><b>Sabor de Abraço</b><br>Agradece a Preferência!<br>Volte sempre!</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},500)}</script></body></html>`);
     janela.document.close();
   };
 
@@ -210,12 +237,11 @@ export default function Dashboard() {
     try {
       setSalvandoTaxas(true);
       await api.patch('/contabil/taxas-cartao', {
-        mes: new Date().toISOString().slice(0, 7),
+        mes: dataLocalISO().slice(0, 7),
         tipo,
         taxaPercentual: Number(taxasCartao[tipo] || 0),
       });
-      const response = await api.get('/dashboard');
-      setData(response.data);
+      reload();
       setEditandoTaxa((atuais) => ({ ...atuais, [tipo]: false }));
       showToast('Taxa aplicada aos pagamentos do mês', 'success');
     } catch (error) {
@@ -229,7 +255,7 @@ export default function Dashboard() {
     <div className="dashboard-fee-setting" key={tipo}>
       <span>{label}</span>
       {editandoTaxa[tipo] ? (
-        <input className="dashboard-card-fee" type="number" min="0" step="0.01" value={taxasCartao[tipo]} onChange={(event) => setTaxasCartao({ ...taxasCartao, [tipo]: event.target.value })} disabled={salvandoTaxas} aria-label={`Taxa do ${label}`} />
+        <input className="dashboard-card-fee" type="number" min="0" step="0.01" value={taxasCartao[tipo]} onChange={(event) => setTaxasCartaoOverride({ ...taxasCartao, [tipo]: event.target.value })} disabled={salvandoTaxas} aria-label={`Taxa do ${label}`} />
       ) : <strong>{Number(taxasCartao[tipo] || 0).toFixed(2).replace('.', ',')}%</strong>}
       {editandoTaxa[tipo] ? <button type="button" className="dashboard-fee-button" onClick={() => aplicarTaxaCartao(tipo)} disabled={salvandoTaxas}>{salvandoTaxas ? 'Salvando...' : 'Salvar'}</button> : <button type="button" className="dashboard-fee-button" onClick={() => setEditandoTaxa((atuais) => ({ ...atuais, [tipo]: true }))}>Alterar</button>}
     </div>
@@ -238,7 +264,7 @@ export default function Dashboard() {
   const pagamentoComTaxaAtual = (pagamento) => {
     const bruto = Number(pagamento.bruto ?? pagamento.total ?? 0);
     const percentual = ['cartao_credito', 'cartao_debito'].includes(pagamento.tipo)
-      ? Number(taxasCartao[pagamento.tipo] || 0)
+      ? Number(taxasCartaoOverride?.[pagamento.tipo] ?? pagamento.taxaPercentual ?? taxasCartao[pagamento.tipo] ?? 0)
       : 0;
     const taxa = bruto * percentual / 100;
     return { ...pagamento, bruto, taxa, total: bruto - taxa };
@@ -280,7 +306,7 @@ export default function Dashboard() {
       link.download = `estoque-${new Date().toLocaleDateString('pt-BR')}.csv`;
       link.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
+    } catch {
       showToast('Erro ao exportar CSV', 'error');
     }
   };
@@ -289,7 +315,7 @@ export default function Dashboard() {
 
   if (dashboardTab === 'producao') return <div className="dashboard-page">
     <div className="dashboard-heading page-heading"><div><span className="dashboard-eyebrow">GESTÃO DA CASA</span><h1>Dashboard</h1><p>Indicadores de produção e disponibilidade de insumos.</p></div><div className="dashboard-open">Produção própria</div></div>
-    <DashboardTabs value={dashboardTab} onChange={setDashboardTab} />
+    <DashboardTabs value={dashboardTab} />
     <section className="dashboard-production-grid"><div className="dashboard-production-summary"><span>Insumos abaixo do mínimo</span><b>{productionData?.baixoEstoque?.length || 0}</b></div><div className="dashboard-production-summary"><span>Fichas disponíveis</span><b>{productionData?.receitasPossiveis?.filter((recipe) => recipe.producoesPossiveis > 0).length || 0}</b></div><div className="dashboard-production-summary"><span>Produções recentes</span><b>{productionData?.producoesRecentes?.length || 0}</b></div></section>
     <section className="dashboard-production-panel"><h2>Podem ser produzidas agora</h2>{productionData?.receitasPossiveis?.length ? productionData.receitasPossiveis.map((recipe) => <div className="dashboard-production-row" key={String(recipe.receitaId)}><span><strong>{recipe.receitaNome}</strong><small>{recipe.produtoNome} · rende {recipe.rendimentoPorProducao} {recipe.unidade}</small></span><div className="dashboard-production-meta"><b>{recipe.producoesPossiveis > 0 ? `${Number(recipe.producoesPossiveis).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} produção(ões)` : 'Insumos insuficientes'}</b>{recipe.calculo && <small>{recipe.calculo}</small>}</div></div>) : <p>Nenhuma ficha técnica cadastrada.</p>}</section>
     <section className="dashboard-production-panel"><h2>Alertas de insumos</h2>{productionData?.baixoEstoque?.length ? productionData.baixoEstoque.map((product) => <div className="dashboard-production-row" key={product._id}><span><strong>{product.nome}</strong><small>Código {product.codigo}</small></span><b>{product.estoqueInsumos} / mínimo {product.estoqueMinimoInsumos} {product.unidadeVenda}</b></div>) : <p>Nenhum insumo abaixo do mínimo.</p>}</section>
@@ -299,7 +325,7 @@ export default function Dashboard() {
   return <div className="dashboard-page">
       <AreaTabs area="dashboard" />
     <div className="dashboard-heading page-heading"><div><span className="dashboard-eyebrow">GESTÃO DA CASA</span><h1>Dashboard</h1><p>Acompanhe o ritmo da casa.</p></div><div className="dashboard-open">{data.comandasAbertas} comandas abertas</div></div>
-    <DashboardTabs value={dashboardTab} onChange={setDashboardTab} />
+    <DashboardTabs value={dashboardTab} />
     <section className="dashboard-fee-settings"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">CONFIGURAÇÃO DE PAGAMENTOS</span><h2>Taxas de cartão</h2><p>As taxas ficam definidas até serem alteradas.</p></div></div><div className="dashboard-fee-grid">{renderTaxaCartao('cartao_credito', 'Cartão de crédito')}{renderTaxaCartao('cartao_debito', 'Cartão de débito')}</div></section>
     <div className="dashboard-periods">{['dia', 'semana', 'mes'].map((periodo) => { const metric = data.periodos[periodo]; return <section className="dashboard-period" key={periodo}><div className="dashboard-period-title"><h2>{labels[periodo]}</h2><span>{metric.pedidos} pedidos</span></div><strong className="dashboard-total">{money(metric.total)}</strong><div className="dashboard-stats"><span><b>{quantidadeComDuasCasas(metric.itens)}</b> itens</span><span><b>{money(metric.ticketMedio)}</b> ticket médio</span></div><div className="dashboard-products"><h3>Mais pedidos</h3>{metric.maisVendidos.length ? metric.maisVendidos.map((product) => <div className="dashboard-product" key={product.nome}><span>{product.nome}</span><b>{product.quantidade}</b></div>) : <p>Nenhum pedido no período.</p>}</div></section>; })}</div>
     <section className="dashboard-comparison">
@@ -324,12 +350,12 @@ export default function Dashboard() {
     <ProductSalesHistory products={produtos} topProducts={data.periodos?.mes?.maisVendidos || []} />
     <section className="dashboard-channel-summary"><div><span>🪑 Mesas</span><strong>{money(relatorioMes.vendasPorTipo?.mesa)}</strong></div><div><span>📦 Balcão</span><strong>{money(relatorioMes.vendasPorTipo?.balcao)}</strong></div><b>Total por atendimento: {money((relatorioMes.vendasPorTipo?.mesa || 0) + (relatorioMes.vendasPorTipo?.balcao || 0))}</b></section>
     <DashboardInsights insights={insights} />
-    <section className="dashboard-discount-card"><span className="dashboard-eyebrow">PROMOÇÕES</span><h2>Descontos por quantidade no mês</h2><strong>{money(relatorioMes.descontosQuantidade?.total)}</strong>{relatorioMes.descontosQuantidade?.produtos?.length ? <div>{relatorioMes.descontosQuantidade.produtos.slice(0, 5).map((produto) => <p key={produto.produtoId}>{produto.nome}: {money(produto.total)} em {produto.unidades} unidade(s)</p>)}</div> : <p>Nenhum desconto por quantidade registrado.</p>}</section>
+    <section className="dashboard-discount-card"><span className="dashboard-eyebrow">PROMOÇÕES</span><h2>Descontos por quantidade no período</h2><strong>{money(relatorioMes.descontosQuantidade?.total)}</strong>{relatorioMes.descontosQuantidade?.produtos?.length ? <div>{relatorioMes.descontosQuantidade.produtos.slice(0, 5).map((produto) => <p key={produto.produtoId}>{produto.nome}: {money(produto.total)} em {produto.unidades} unidade(s)</p>)}</div> : <p>Nenhum desconto por quantidade registrado.</p>}</section>
     <section className="dashboard-comandas"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">HISTÓRICO DE COMANDAS</span><h2>Comandas geradas</h2><p>Consulte comandas abertas, fechadas ou canceladas por período.</p></div><div className="dashboard-report-actions"><span className="dashboard-orders-count">{comandas.length}</span><button className="dashboard-toggle-button" onClick={() => alternarQuadro('comandas')}>{quadrosAbertos.comandas ? 'Ocultar' : 'Consultar'}</button></div></div>{quadrosAbertos.comandas && <><form className="dashboard-comandas-filter" onSubmit={consultarComandas}><label>De<input type="date" value={dataInicio} onChange={(event) => setDataInicio(event.target.value)} /></label><label>Até<input type="date" value={dataFim} onChange={(event) => setDataFim(event.target.value)} /></label><button className="dashboard-toggle-button" type="submit" disabled={carregandoComandas}>{carregandoComandas ? 'Consultando...' : 'Filtrar'}</button></form>{comandas.length ? <div className="dashboard-comandas-list">{Object.entries(comandasPorData).map(([data, comandasDoDia]) => <details className="dashboard-comandas-day" key={data}><summary><strong>{formatarDataComandas(data)}</strong><span>{comandasDoDia.length} comanda(s)</span></summary><div className="dashboard-comandas-day-list">{comandasDoDia.map((comanda) => { const total = comanda.itens?.reduce((sum, item) => sum + Number(item.precoUnitario || 0) * Number(item.quantidade || 0), 0); return <div className="dashboard-comanda" key={comanda._id}><div><strong>#{comanda.numero}</strong><span>{comanda.clienteNome || 'Cliente não identificado'}</span><div style={{ display: 'grid', gap: 3 }}><small>{new Date(comanda.createdAt).toLocaleString('pt-BR')} · {comanda.itens?.length || 0} itens · {comanda.atendente || 'Atendente não informado'}</small>{(Number(comanda.desconto || 0) > 0 || Boolean(comanda.utilizacaoInterna)) && <small style={{ display: 'block', color: 'var(--accent-primary)', fontWeight: 700 }}>{Number(comanda.desconto || 0) > 0 ? `Desconto: -${money(comanda.desconto)}` : ''}{Number(comanda.desconto || 0) > 0 && Boolean(comanda.utilizacaoInterna) ? ' · ' : ''}{comanda.utilizacaoInterna ? 'Uso interno' : ''}</small>}</div></div><div><b>{money(total)}</b><span className={`dashboard-comanda-status comanda-status-${comanda.status}`}>{statusLabels[comanda.status] || comanda.status}</span></div></div>; })}</div></details>)}</div> : <p className="dashboard-empty-orders">Nenhuma comanda encontrada no período.</p>}</>}</section>
     <section className="dashboard-stock"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">RELATÓRIO DIÁRIO DE ESTOQUE</span><h2>Posição de estoque</h2><p>Abastecimento informado antes das 8h = 100% do dia.</p></div><div className="dashboard-report-actions"><span className="dashboard-orders-count">{produtos.length}</span><button className="dashboard-toggle-button" onClick={() => alternarQuadro('estoque')}>{quadrosAbertos.estoque ? 'Ocultar' : 'Mostrar'}</button><button className="dashboard-print-button" onClick={exportarCsvEstoque} style={{ padding: '6px 12px', marginLeft: '8px', background: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📊 CSV</button>
               <button className="dashboard-toggle-button" onClick={toggleNovelties} style={{ padding: '6px 12px', marginLeft: '8px', background: 'var(--success-bg)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🆕 Novelties</button><button className="dashboard-toggle-button" onClick={toggleNovelties} style={{ padding: '6px 12px', marginLeft: '8px', background: 'var(--success-bg)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🆕 Novelties</button></div></div>{quadrosAbertos.estoque && <><div className="dashboard-stock-legend"><span><i className="stock-good" /> Acima de 60%</span><span><i className="stock-warning" /> De 25% a 60%</span><span><i className="stock-danger" /> Abaixo de 25%</span></div>{estoque.length ? <div className="dashboard-stock-categories">{Object.entries(estoquePorCategoria).map(([categoria, itens]) => <div className="dashboard-stock-category" key={categoria}><h3>{categoria}<small>{itens.length} produto(s)</small></h3><div className="dashboard-stock-list">{itens.map((produto) => { const percentual = percentualEstoque(produto); const estoqueInicial = produto.estoqueInicialData === dataLocal ? produto.estoqueInicialDia : produto.estoque; return <div className="dashboard-stock-item" key={produto._id}><div><strong>{produto.nome}</strong><small>Código {produto.codigo} · {produto.estoque} de {estoqueInicial} un. no início do dia</small><div className="dashboard-stock-bar"><span className={classeEstoque(percentual)} style={{ width: `${percentual}%` }} /></div></div><b className={classeEstoque(percentual)}>{percentual}%</b></div>; })}</div></div>)}</div> : <p className="dashboard-empty-orders">Nenhum produto cadastrado.</p>}</>}</section>
-    <section className="dashboard-customers"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">BASE DE CLIENTES</span><h2>Clientes cadastrados</h2><p>Nome e telefone para futuras ações de marketing.</p></div><div className="dashboard-report-actions"><span className="dashboard-orders-count">{relatorioClientes.totalCadastrados || data.clientesCadastrados || 0}</span><button className="dashboard-print-button" onClick={exportarClientesMailing}>⬇️ Exportar</button><button className="dashboard-print-button" onClick={imprimirRelatorioClientes}>🖨️ Imprimir</button><button className="dashboard-toggle-button" onClick={() => alternarQuadro('clientes')}>{quadrosAbertos.clientes ? 'Ocultar' : 'Mostrar'}</button></div></div>{quadrosAbertos.clientes && <div className="dashboard-customer-list">{relatorioClientes.clientes.length ? relatorioClientes.clientes.map((cliente) => <div className="dashboard-customer" key={String(cliente.id)}><strong>{cliente.nome}</strong><span>{cliente.telefone || 'Telefone não informado'}</span></div>) : <p className="dashboard-empty-orders">Nenhum cliente cadastrado.</p>}</div>}</section>
-    <section className="dashboard-monthly"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">FECHAMENTO DO MÊS</span><h2>Relatório mensal completo</h2><p>{relatorioMes.periodo || 'Período atual'} · vendas, recebimentos e pendências.</p></div><div className="dashboard-report-actions"><button className="dashboard-print-button" onClick={imprimirRelatorioMes}>🖨️ Imprimir relatório</button><button className="dashboard-toggle-button" onClick={() => alternarQuadro('mensal')}>{quadrosAbertos.mensal ? 'Ocultar' : 'Mostrar'}</button></div></div>{quadrosAbertos.mensal && <><div className="dashboard-monthly-summary"><div><small>Vendas</small><b>{money(relatorioMes.total)}</b></div><div><small>Recebido líquido</small><b className="sales-received">{money(recebidoLiquidoAtual)}</b></div><div><small>A receber</small><b className="sales-pending">{money(aReceberMensal)}</b></div><div><small>Taxas de cartão</small><b>{money(taxasCartaoAtual)}</b></div><div><small>Pedidos</small><b>{relatorioMes.pedidos}</b></div></div><div className="dashboard-monthly-columns"><div><h3>Formas de pagamento</h3>{pagamentosComTaxaAtual.length ? pagamentosComTaxaAtual.map((pagamento) => <div className="dashboard-monthly-row" key={pagamento.tipo}><span>{paymentLabels[pagamento.tipo] || pagamento.tipo}</span>{['cartao_credito', 'cartao_debito'].includes(pagamento.tipo) ? <input className="dashboard-card-fee" type="number" min="0" step="0.01" placeholder="Taxa %" value={taxasCartao[pagamento.tipo]} onChange={(event) => setTaxasCartao({ ...taxasCartao, [pagamento.tipo]: event.target.value })} onBlur={() => aplicarTaxaCartao(pagamento.tipo)} disabled={salvandoTaxas} aria-label={`Taxa do ${paymentLabels[pagamento.tipo]}`} /> : <span />}<b title={`Bruto: ${money(pagamento.bruto)} | Taxa: ${money(pagamento.taxa)}`}>{money(pagamento.total)}</b></div>) : <p className="dashboard-empty-orders">Nenhum pagamento registrado.</p>}<small className="dashboard-fee-note">Informe a taxa em percentual. O valor líquido e o recebido são recalculados imediatamente.</small></div><div><h3>Produtos mais vendidos</h3>{relatorioMes.produtos.length ? relatorioMes.produtos.slice(0, 5).map((produto) => <div className="dashboard-monthly-row" key={produto.nome}><span>{produto.quantidade}x {produto.nome}</span><b>{money(produto.total)}</b></div>) : <p className="dashboard-empty-orders">Nenhuma venda registrada.</p>}</div></div></>}</section>
+    <section className="dashboard-customers"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">BASE DE CLIENTES</span><h2>Clientes cadastrados</h2><p>Nome, telefone e movimento no período selecionado.</p></div><div className="dashboard-report-actions"><span className="dashboard-orders-count">{relatorioClientes.totalCadastrados || data.clientesCadastrados || 0}</span><button className="dashboard-print-button" onClick={exportarClientesMailing}>⬇️ Exportar página</button><button className="dashboard-print-button" onClick={imprimirRelatorioClientes}>🖨️ Imprimir página</button><button className="dashboard-toggle-button" onClick={() => alternarQuadro('clientes')}>{quadrosAbertos.clientes ? 'Ocultar' : 'Mostrar'}</button></div></div>{quadrosAbertos.clientes && <><div className="dashboard-customer-list">{relatorioClientes.clientes.length ? relatorioClientes.clientes.map((cliente) => <div className="dashboard-customer" key={String(cliente.id)}><span><strong>{cliente.nome}</strong><small>{cliente.telefone || 'Telefone não informado'} · {cliente.pedidos} pedido(s)</small></span><b>{money(cliente.total)}</b></div>) : <p className="dashboard-empty-orders">Nenhum cliente cadastrado.</p>}</div><Paginacao pagination={paginationData} page={urlPagination.page} pageSize={urlPagination.pageSize} onPageChange={urlPagination.setPage} onPageSizeChange={urlPagination.setPageSize} label="clientes" /></>}</section>
+    <section className="dashboard-monthly"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">RELATÓRIO DO PERÍODO</span><h2>Relatório de vendas</h2><p>{relatorioMes.periodo || 'Período atual'} · vendas, recebimentos e pendências.</p></div><div className="dashboard-report-actions"><button className="dashboard-print-button" onClick={imprimirRelatorioMes}>🖨️ Imprimir relatório</button><button className="dashboard-toggle-button" onClick={() => alternarQuadro('mensal')}>{quadrosAbertos.mensal ? 'Ocultar' : 'Mostrar'}</button></div></div><form className="dashboard-report-range" onSubmit={(event) => event.preventDefault()}><label>De<input type="date" value={urlPagination.filters.dataInicio || ''} onChange={(event) => urlPagination.setFilters({ dataInicio: event.target.value, dataFim: urlPagination.filters.dataFim })} /></label><label>Até<input type="date" value={urlPagination.filters.dataFim || ''} onChange={(event) => urlPagination.setFilters({ dataInicio: urlPagination.filters.dataInicio, dataFim: event.target.value })} /></label><span>Os indicadores e relatórios usam esse intervalo.</span></form>{quadrosAbertos.mensal && <><div className="dashboard-monthly-summary"><div><small>Vendas</small><b>{money(relatorioMes.total)}</b></div><div><small>Recebido líquido</small><b className="sales-received">{money(recebidoLiquidoAtual)}</b></div><div><small>A receber</small><b className="sales-pending">{money(aReceberMensal)}</b></div><div><small>Taxas de cartão</small><b>{money(taxasCartaoAtual)}</b></div><div><small>Pedidos</small><b>{relatorioMes.pedidos}</b></div></div><div className="dashboard-monthly-columns"><div><h3>Formas de pagamento</h3>{pagamentosComTaxaAtual.length ? pagamentosComTaxaAtual.map((pagamento) => <div className="dashboard-monthly-row" key={pagamento.tipo}><span>{paymentLabels[pagamento.tipo] || pagamento.tipo}</span>{['cartao_credito', 'cartao_debito'].includes(pagamento.tipo) ? <input className="dashboard-card-fee" type="number" min="0" step="0.01" placeholder="Taxa %" value={taxasCartaoOverride?.[pagamento.tipo] ?? pagamento.taxaPercentual ?? taxasCartao[pagamento.tipo]} onChange={(event) => setTaxasCartaoOverride({ ...taxasCartao, [pagamento.tipo]: event.target.value })} onBlur={() => aplicarTaxaCartao(pagamento.tipo)} disabled={salvandoTaxas} aria-label={`Taxa do ${paymentLabels[pagamento.tipo]}`} /> : <span />}<b title={`Bruto: ${money(pagamento.bruto)} | Taxa: ${money(pagamento.taxa)}`}>{money(pagamento.total)}</b></div>) : <p className="dashboard-empty-orders">Nenhum pagamento registrado.</p>}<small className="dashboard-fee-note">Informe a taxa em percentual. O valor líquido e o recebido são recalculados imediatamente.</small></div><div><h3>Produtos mais vendidos</h3>{relatorioMes.produtos.length ? relatorioMes.produtos.slice(0, 5).map((produto) => <div className="dashboard-monthly-row" key={produto.nome}><span>{produto.quantidade}x {produto.nome}</span><b>{money(produto.total)}</b></div>) : <p className="dashboard-empty-orders">Nenhuma venda registrada.</p>}</div></div></>}</section>
     <section className="dashboard-orders"><div className="dashboard-section-heading"><div><span className="dashboard-eyebrow">ACOMPANHAMENTO DO DIA</span><h2>Pedidos e vendas de hoje</h2><p>Resumo financeiro e movimento mais recente da casa.</p></div><div className="dashboard-report-actions"><strong className="dashboard-sales-total">{money(vendasHoje.total)}</strong><span className="dashboard-orders-count">{pedidosHoje.length}</span><button className="dashboard-toggle-button" onClick={() => alternarQuadro('pedidos')}>{quadrosAbertos.pedidos ? 'Ocultar' : 'Mostrar'}</button></div></div>{quadrosAbertos.pedidos && <><div className="dashboard-sales-summary"><div><small>Pedidos</small><b>{vendasHoje.pedidos}</b></div><div><small>Itens vendidos</small><b>{vendasHoje.itens}</b></div><div><small>Ticket médio</small><b>{money(vendasHoje.pedidos ? vendasHoje.total / vendasHoje.pedidos : 0)}</b></div><div><small>Recebido</small><b className="sales-received">{money(vendasHoje.recebido)}</b></div><div><small>A receber</small><b className="sales-pending">{money(vendasHoje.pendente)}</b></div></div>{pedidosHoje.length ? <div className="dashboard-orders-list">{pedidosHoje.map((pedido) => <div className="dashboard-order" key={pedido._id}><div><strong>#{pedido.numero}</strong><span>{pedido.clienteNome || 'Cliente não identificado'}</span><small>{new Date(pedido.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · {pedido.itens?.length || 0} itens</small></div><div><b>{money(pedido.total)}</b><span className={`dashboard-order-status status-${pedido.status}`}>{pedido.status}</span></div></div>)}</div> : <p className="dashboard-empty-orders">Nenhum pedido registrado hoje.</p>}</>}</section>
     {comandaSelecionada && <div className="dashboard-comanda-modal" onClick={() => setComandaSelecionada(null)}><div className="dashboard-comanda-receipt" onClick={(event) => event.stopPropagation()}><div className="dashboard-receipt-header"><strong>SABOR DE ABRAÇO</strong><span>COMANDA #{comandaSelecionada.numero}</span><small>{new Date(comandaSelecionada.createdAt).toLocaleString('pt-BR')}</small></div><div className="dashboard-receipt-meta"><div>Cliente: <b>{comandaSelecionada.clienteNome || 'Cliente não identificado'}</b></div><div>Atendente: <b>{comandaSelecionada.atendente || 'Não informado'}</b></div>{comandaSelecionada.observacao && <div>Observação: <b>{comandaSelecionada.observacao}</b></div>}</div><div className="dashboard-receipt-items">{(comandaSelecionada.itens || []).map((item) => <div className="dashboard-receipt-item" key={item._id}><span>{item.quantidade}x {item.nome}<small>{money(item.precoUnitario)} cada</small></span><b>{money(Number(item.precoUnitario || 0) * Number(item.quantidade || 0))}</b></div>)}</div><div className="dashboard-receipt-total"><span>TOTAL</span><b>{money((comandaSelecionada.itens || []).reduce((total, item) => total + Number(item.precoUnitario || 0) * Number(item.quantidade || 0), 0))}</b></div><div className="dashboard-receipt-status">Status: {statusLabels[comandaSelecionada.status] || comandaSelecionada.status}</div><div className="dashboard-receipt-contact"><label>Nome do cliente<input value={nomeComanda} onChange={(event) => setNomeComanda(event.target.value)} placeholder="Nome do cliente" /></label><label>Telefone para WhatsApp<input type="tel" value={telefoneComanda} onChange={(event) => setTelefoneComanda(event.target.value)} placeholder="(00) 00000-0000" /></label></div><div className="dashboard-receipt-actions"><button className="dashboard-receipt-print" onClick={imprimirComanda}>🖨️ Imprimir</button><button className="dashboard-receipt-whatsapp" onClick={enviarComandaWhatsApp}>💬 WhatsApp</button></div><button className="dashboard-toggle-button" onClick={() => setComandaSelecionada(null)}>Fechar</button></div></div>}
     <style>{`
@@ -439,6 +465,10 @@ export default function Dashboard() {
       .dashboard-stock { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
       .dashboard-customers, .dashboard-sales { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
       .dashboard-monthly { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
+      .dashboard-report-range { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; margin:14px 0; }
+      .dashboard-report-range label { display:grid; gap:4px; color:var(--text-secondary); font-size:11px; font-weight:700; }
+      .dashboard-report-range input { min-height:36px; padding:7px 9px; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-tertiary); color:var(--text-primary); }
+      .dashboard-report-range span { color:var(--text-secondary); font-size:11px; }
       .dashboard-client-report { margin-top:16px; padding:18px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-sm); }
       .dashboard-report-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
       .dashboard-client-report-list { display:grid; gap:8px; }

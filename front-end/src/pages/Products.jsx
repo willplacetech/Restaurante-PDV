@@ -19,6 +19,7 @@ const vazio = {
   tipo: 'venda',
   unidade: 'kg',
   tipoProduto: 'revenda',
+  modoOperacional: '',
   usavelEmReceita: false,
   categoria: 'Bebidas Quentes',
   preco: '',
@@ -162,6 +163,14 @@ export default function Products() {
       showToast('⚠️ Código já cadastrado. Escolha outro.', 'warning');
       return;
     }
+    if (tipo === 'venda' && form.tipoProduto === 'pendente') {
+      showToast('⚠️ Escolha Revenda ou Preparação e informe o modo operacional.', 'warning');
+      return;
+    }
+    if (tipo === 'venda' && form.tipoProduto === 'preparacao' && !['sob_demanda', 'lote'].includes(form.modoOperacional)) {
+      showToast('⚠️ Selecione se a Preparação será sob demanda ou em lote.', 'warning');
+      return;
+    }
 
     if (tipo === 'venda') {
       const descontos = (form.descontosPorQuantidade || []).map((faixa) => ({ quantidadeMinima: Number(faixa.quantidadeMinima), precoUnitario: Number(faixa.precoUnitario), ativo: faixa.ativo !== false }));
@@ -212,8 +221,11 @@ export default function Products() {
       quantidade: limparCampoNumerico(form.conteudoPorEmbalagem) ?? 1,
       rendimento: rendimentoFormulario,
       tipoProduto: tipo === 'venda' ? form.tipoProduto : undefined,
-      rendimentoPorReceita: tipo === 'venda' && form.tipoProduto === 'producao' ? Number(form.rendimentoPorReceita || 1) : 1,
-      estoque: tipo === 'insumo' ? limparCampoNumerico(form.estoqueEmbalagens) ?? 0 : (form.aFazer ? 0 : limparCampoNumerico(form.estoque) ?? 0),
+      modoOperacional: tipo === 'venda' && form.tipoProduto === 'preparacao' ? form.modoOperacional : undefined,
+      rendimentoPorReceita: tipo === 'venda' && form.modoOperacional === 'lote' ? Number(form.rendimentoPorReceita || 1) : 1,
+      estoque: tipo === 'insumo' ? limparCampoNumerico(form.estoqueEmbalagens) ?? 0 : (form.modoOperacional === 'sob_demanda' ? 0 : limparCampoNumerico(form.estoque) ?? 0),
+      aFazer: tipo === 'venda' && form.modoOperacional === 'sob_demanda',
+      producaoPropria: tipo === 'venda' && form.modoOperacional === 'lote',
       estoqueInsumos: tipo === 'insumo' ? limparCampoNumerico(form.estoqueEmbalagens) ?? 0 : (form.usavelEmReceita ? limparCampoNumerico(form.estoqueInsumos) ?? 0 : undefined),
       estoqueEmbalagens: tipo === 'insumo' ? limparCampoNumerico(form.estoqueEmbalagens) ?? 0 : undefined,
       estoqueMinimoEmbalagens: tipo === 'insumo' ? limparCampoNumerico(form.estoqueMinimoEmbalagens) ?? 0 : undefined,
@@ -238,7 +250,7 @@ export default function Products() {
       rendimentoPorUnidadeCompra: Number(form.rendimentoPorUnidadeCompra || 0),
       ativo: Boolean(form.ativo),
       permitirVendaSemInsumo: Boolean(form.permitirVendaSemInsumo),
-      fichaTecnica: tipo === 'venda' && form.aFazer ? form.fichaTecnica.map((item) => ({ produtoId: item.produtoId?._id || item.produtoId, quantidade: Number(item.quantidade), unidade: item.unidade })) : [],
+      fichaTecnica: tipo === 'venda' && form.tipoProduto === 'preparacao' ? form.fichaTecnica.map((item) => ({ produtoId: item.produtoId?._id || item.produtoId, quantidade: Number(item.quantidade), unidade: item.unidade })) : [],
     };
     try {
       const salvar = (dados) => editing ? api.put(`/products/${editing._id}`, dados) : api.post('/products', dados);
@@ -295,7 +307,8 @@ export default function Products() {
       unidadeVenda: produto.unidadeVenda || 'un',
       vendidoFracionado: Boolean(produto.vendidoFracionado),
       aFazer: Boolean(produto.aFazer),
-      tipoProduto: produto.tipoProduto || (produto.aFazer ? 'coz' : produto.producaoPropria ? 'producao' : 'revenda'),
+      tipoProduto: produto.preparacaoPendente ? 'pendente' : (produto.tipoProduto || (produto.aFazer || produto.producaoPropria ? 'preparacao' : 'revenda')),
+      modoOperacional: produto.modoOperacional || (produto.aFazer ? 'sob_demanda' : produto.producaoPropria ? 'lote' : ''),
       rendimentoPorReceita: produto.rendimentoPorReceita || 1,
       fichaTecnica: produto.fichaTecnica || [],
       permitirVendaSemInsumo: Boolean(produto.permitirVendaSemInsumo),
@@ -371,22 +384,29 @@ export default function Products() {
                 <legend className="label">Tipo de produto *</legend>
                 <div className="product-radio-group">
                   <label className="radio">
-                    <input className="product-radio" type="radio" name="tipoProduto" value="revenda" checked={form.tipo === 'venda' && form.tipoProduto === 'revenda'} onChange={() => setForm({ ...form, tipo: 'venda', tipoProduto: 'revenda', categoria: 'Bebidas Quentes', aFazer: false, producaoPropria: false })} />
+                    <input className="product-radio" type="radio" name="tipoProduto" value="revenda" checked={form.tipo === 'venda' && form.tipoProduto === 'revenda'} onChange={() => setForm({ ...form, tipo: 'venda', tipoProduto: 'revenda', modoOperacional: '', categoria: 'Bebidas Quentes', aFazer: false, producaoPropria: false })} />
                     <span>Revenda</span>
                   </label>
                   <label className="radio">
-                    <input className="product-radio" type="radio" name="tipoProduto" value="coz" checked={form.tipo === 'venda' && form.tipoProduto === 'coz'} onChange={() => setForm({ ...form, tipo: 'venda', tipoProduto: 'coz', categoria: 'Pratos na Hora', estoque: 0, aFazer: true, producaoPropria: false })} />
-                    <span>Coz — na hora</span>
+                    <input className="product-radio" type="radio" name="tipoProduto" value="preparacao" checked={form.tipo === 'venda' && form.tipoProduto === 'preparacao'} onChange={() => setForm({ ...form, tipo: 'venda', tipoProduto: 'preparacao', modoOperacional: '', categoria: 'Pratos na Hora', estoque: 0, aFazer: false, producaoPropria: false })} />
+                    <span>Preparação</span>
                   </label>
                   <label className="radio">
-                    <input className="product-radio" type="radio" name="tipoProduto" value="producao" checked={form.tipo === 'venda' && form.tipoProduto === 'producao'} onChange={() => setForm({ ...form, tipo: 'venda', tipoProduto: 'producao', categoria: 'Outros', aFazer: false, producaoPropria: true })} />
-                    <span>Produção própria — lote</span>
-                  </label>
-                  <label className="radio">
-                    <input className="product-radio" type="radio" name="tipoProduto" value="insumo" checked={form.tipo === 'insumo'} onChange={() => setForm({ ...form, tipo: 'insumo', tipoProduto: 'revenda', categoria: 'Insumos', aFazer: false, producaoPropria: false })} />
+                    <input className="product-radio" type="radio" name="tipoProduto" value="insumo" checked={form.tipo === 'insumo'} onChange={() => setForm({ ...form, tipo: 'insumo', tipoProduto: 'revenda', modoOperacional: '', categoria: 'Insumos', aFazer: false, producaoPropria: false })} />
                     <span>Insumo / Matéria-prima</span>
                   </label>
                 </div>
+                {form.tipoProduto === 'pendente' && <p className="alert alert--warning" role="alert">Este registro legado é ambíguo. Escolha Revenda ou Preparação e defina o modo antes de salvar.</p>}
+                {form.tipo === 'venda' && form.tipoProduto === 'preparacao' && (
+                  <label className="field field--full">
+                    <span className="label">Modo operacional *</span>
+                    <select required value={form.modoOperacional} onChange={(event) => setForm({ ...form, modoOperacional: event.target.value, aFazer: event.target.value === 'sob_demanda', producaoPropria: event.target.value === 'lote', estoque: event.target.value === 'sob_demanda' ? 0 : form.estoque })}>
+                      <option value="">Selecione</option>
+                      <option value="sob_demanda">Sob demanda — preparar na venda</option>
+                      <option value="lote">Lote — produzir e manter estoque pronto</option>
+                    </select>
+                  </label>
+                )}
               </fieldset>
 
               <label className="field">
@@ -419,7 +439,7 @@ export default function Products() {
                 </label>
               )}
 
-              {form.tipo === 'venda' && form.tipoProduto !== 'coz' && (
+              {form.tipo === 'venda' && form.modoOperacional !== 'sob_demanda' && (
                 <label className="field">
                   <span className="label">Estoque atual</span>
                   <input type="number" step="0.001" min={0} value={form.estoque} onChange={(event) => setForm({ ...form, estoque: event.target.value })} />
@@ -443,18 +463,18 @@ export default function Products() {
                 </>
               )}
 
-              {form.tipo === 'venda' && form.tipoProduto === 'coz' && (
+              {form.tipo === 'venda' && form.tipoProduto === 'preparacao' && form.modoOperacional === 'sob_demanda' && (
                 <div className="coz-stock-notice field--full">
-                  <strong>Coz não possui estoque próprio</strong>
+                  <strong>Preparação sob demanda não possui estoque de produto pronto</strong>
                   <span>Disponibilidade calculada pela ficha técnica e pelos insumos disponíveis.</span>
                 </div>
               )}
 
-              {form.tipo === 'venda' && form.tipoProduto === 'producao' && (
+              {form.tipo === 'venda' && form.tipoProduto === 'preparacao' && form.modoOperacional === 'lote' && (
                 <label className="field">
                   <span className="label">Rendimento por ficha técnica *</span>
                   <input required type="number" min="0.001" step="0.001" value={form.rendimentoPorReceita || 1} onChange={(event) => setForm({ ...form, rendimentoPorReceita: event.target.value })} />
-                  <small className="hint">Quantas unidades saem de uma fornada.</small>
+                  <small className="hint">Quantas unidades prontas saem de cada lote.</small>
                 </label>
               )}
             </div>
@@ -512,10 +532,10 @@ export default function Products() {
             )}
 
             {/* ---------- Cozinha / ficha técnica ---------- */}
-            {form.tipo === 'venda' && (form.tipoProduto === 'coz' || form.tipoProduto === 'producao') && (
+            {form.tipo === 'venda' && form.tipoProduto === 'preparacao' && form.modoOperacional && (
               <CollapsibleSection title="Ficha técnica" description="Custo, rendimento e disponibilidade" icon="📋">
                 <div className="stack">
-                  {form.tipoProduto === 'coz' && (
+                  {form.modoOperacional === 'sob_demanda' && (
                     <div className="coz-recipe-panel">
                       {fichaProduto ? (
                         <>
@@ -531,7 +551,7 @@ export default function Products() {
                       </Link>
                     </div>
                   )}
-                  {form.tipoProduto === 'producao' && (
+                  {form.modoOperacional === 'lote' && (
                     <div className="coz-recipe-panel">
                       <span>Este produto é produzido internamente e usa uma ficha técnica para controlar o custo e o rendimento.</span>
                       <Link className="coz-recipe-link" to={`/producao/fichas?produto=${editing?._id || ''}`}>Gerenciar ficha técnica</Link>

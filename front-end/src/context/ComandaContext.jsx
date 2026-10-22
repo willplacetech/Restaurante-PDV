@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 export const ComandaContext = createContext();
 
@@ -15,7 +15,7 @@ export const ComandaProvider = ({ children }) => {
   };
 
   const removerItem = (itemId) => {
-    setItensComanda((itens) => itens.filter((item) => item.id !== itemId)));
+    setItensComanda((itens) => itens.filter((item) => item.id !== itemId));
   };
 
   const clearComanda = () => {

@@ -9,6 +9,7 @@ const Production = require('../models/Production');
 const StockMovement = require('../models/StockMovement');
 const { dadosEstoqueProduto } = require('../utils/estoqueProduto');
 const { paraBase, calcularResumoCompleto, consumirInsumo, estoqueTotalBase, unidadeBase, calcularCustoDaFichaTecnica } = require('../utils/estoqueInsumo');
+const { inferirModoOperacional, ehPreparacao } = require('../utils/preparationMode');
 
 const router = express.Router();
 const locations = ['venda', 'insumos'];
@@ -29,8 +30,9 @@ const consumirIngrediente = (produto, quantidade, unidade) => {
 const sincronizarCustoReceita = async (recipeId) => {
   const recipe = await Recipe.findById(recipeId).populate('ingredientes.produtoId');
   if (!recipe) return;
-  const tipoProduto = recipe.produtoId?.tipoProduto || (recipe.produtoId?.aFazer ? 'coz' : 'producao');
-  const rendimento = tipoProduto === 'coz' ? 1 : Number(recipe.rendimento || 1);
+  const modoOperacional = inferirModoOperacional(recipe.produtoId);
+  if (!modoOperacional) return;
+  const rendimento = modoOperacional === 'sob_demanda' ? 1 : Number(recipe.rendimento || 1);
   const resultado = await calcularCustoDaFichaTecnica(recipe.ingredientes);
   const disponivel = resultado.fonte === 'insumo';
   const custoTotal = disponivel ? Number(resultado.custoTotal) : 0;
@@ -43,7 +45,7 @@ const sincronizarCustoReceita = async (recipeId) => {
     dataUltimoCalculo: new Date(),
     fonteCalculo: resultado.fonte,
     custoUltimoSalvo: disponivel ? custoUnitario : 0,
-    fichaTecnica: recipe.ingredientes.map((item) => ({ produtoId: item.produtoId._id || item.produtoId, quantidade: tipoProduto === 'coz' ? Number(item.quantidade) : Number(item.quantidade) / Math.max(1, Number(recipe.rendimento || 1)), unidade: item.unidade })),
+    fichaTecnica: recipe.ingredientes.map((item) => ({ produtoId: item.produtoId._id || item.produtoId, quantidade: modoOperacional === 'sob_demanda' ? Number(item.quantidade) : Number(item.quantidade) / Math.max(1, Number(recipe.rendimento || 1)), unidade: item.unidade })),
   } });
 };
 
@@ -62,9 +64,9 @@ const validate = (req, res) => {
 
 router.get('/recipes', async (req, res) => {
   try {
-    const recipes = await Recipe.find().populate('produtoId', 'nome codigo tipoProduto unidadeVenda producaoPropria aFazer estoque').populate('ingredientes.produtoId', 'nome codigo tipo usavelEmReceita precoCompra custoUnitarioBase unidadeVenda unidadeConteudo conteudoPorEmbalagem estoque estoqueInsumos estoqueEmbalagens estoqueConteudoAberto').populate('updatedBy', 'username').sort({ nome: 1 });
+    const recipes = await Recipe.find().populate('produtoId', 'nome codigo tipoProduto modoOperacional unidadeVenda producaoPropria aFazer estoque').populate('ingredientes.produtoId', 'nome codigo tipo usavelEmReceita precoCompra custoUnitarioBase unidadeVenda unidadeConteudo conteudoPorEmbalagem estoque estoqueInsumos estoqueEmbalagens estoqueConteudoAberto').populate('updatedBy', 'username').sort({ nome: 1 });
     res.json(recipes.map((recipe) => {
-      const produtoTipo = recipe.produtoId?.tipoProduto || (recipe.produtoId?.aFazer ? 'coz' : 'producao');
+      const modoOperacional = inferirModoOperacional(recipe.produtoId);
       const ingredientes = recipe.ingredientes.map((item) => {
         const resumo = item.produtoId ? calcularResumoCompleto(item.produtoId) : null;
         const custoUnitarioBase = Number(resumo?.custoUnitarioBase || 0);
@@ -76,14 +78,14 @@ router.get('/recipes', async (req, res) => {
           custoDisponivel: custoUnitarioBase > 0,
         };
       });
-      const limites = produtoTipo === 'producao' ? [Number(recipe.produtoId?.estoque || 0)] : recipe.ingredientes.map((item) => {
+      const limites = modoOperacional === 'lote' ? [Number(recipe.produtoId?.estoque || 0)] : recipe.ingredientes.map((item) => {
         const estoque = estoqueTotalBase(item.produtoId);
         const consumo = paraBase(item.quantidade, item.unidade);
         return consumo > 0 ? estoque / consumo : 0;
       });
       const producoesPossiveis = limites.length ? Math.floor(Math.min(...limites)) : 0;
       const custoPorUnidade = Number(recipe.custoUnitario || 0);
-      return { ...recipe.toObject(), ingredientes, tipoFicha: produtoTipo, disponibilidade: { quantidade: produtoTipo === 'producao' ? producoesPossiveis : producoesPossiveis * Number(recipe.rendimento || 1), limitante: produtoTipo === 'producao' ? 'Estoque do produto' : recipe.ingredientes[limites.findIndex((limite) => limite === Math.min(...limites))]?.produtoId?.nome || null }, custoPorUnidade };
+      return { ...recipe.toObject(), ingredientes, tipoFicha: ehPreparacao(recipe.produtoId) ? 'preparacao' : null, modoOperacional, preparacaoPendente: ehPreparacao(recipe.produtoId) && !modoOperacional, disponibilidade: { quantidade: modoOperacional === 'lote' ? producoesPossiveis : modoOperacional === 'sob_demanda' ? producoesPossiveis * Number(recipe.rendimento || 1) : null, limitante: modoOperacional === 'lote' ? 'Estoque do produto' : modoOperacional === 'sob_demanda' ? recipe.ingredientes[limites.findIndex((limite) => limite === Math.min(...limites))]?.produtoId?.nome || null : null }, custoPorUnidade };
     }));
   } catch (error) { res.status(500).json({ msg: error.message }); }
 });
@@ -101,9 +103,9 @@ router.post('/recipes', onlyManager, [
     const produto = await Product.findById(produtoId);
     if (!produto) return res.status(404).json({ msg: 'Produto produzido não encontrado' });
     if (produto.tipo === 'insumo') return res.status(400).json({ msg: 'Insumos não podem ser produtos produzidos' });
-    const tipoProduto = produto.tipoProduto || (produto.aFazer ? 'coz' : produto.producaoPropria ? 'producao' : 'revenda');
-    if (!['coz', 'producao'].includes(tipoProduto)) return res.status(400).json({ msg: 'Vincule a ficha a um produto Coz ou de produção própria' });
-    if (tipoProduto === 'coz' && Number(rendimento) !== 1) return res.status(400).json({ msg: 'Ficha Coz deve ter rendimento igual a 1 porção' });
+    const modoOperacional = inferirModoOperacional(produto);
+    if (!ehPreparacao(produto) || !modoOperacional) return res.status(400).json({ msg: 'Produto sem modo de Preparação resolvido; defina o modo antes de vincular a ficha técnica.' });
+    if (modoOperacional === 'sob_demanda' && Number(rendimento) !== 1) return res.status(400).json({ msg: 'Preparação sob demanda deve ter rendimento igual a 1 porção' });
     const ids = ingredientes.map((item) => item.produtoId);
     const produtos = await Product.find({ _id: { $in: ids } });
     const byId = new Map(produtos.map((produtoItem) => [String(produtoItem._id), produtoItem]));
@@ -112,10 +114,11 @@ router.post('/recipes', onlyManager, [
     if (itens.some((item) => { const produtoItem = byId.get(String(item.produtoId)); return produtoItem.tipo !== 'insumo' && !produtoItem.usavelEmReceita; })) return res.status(400).json({ msg: 'A receita só pode usar insumos ou produtos híbridos' });
     if (await Recipe.exists({ produtoId, ativa: true })) return res.status(400).json({ msg: 'Este produto já possui uma ficha técnica' });
     const recipe = await Recipe.create({ nome: nome.trim(), produtoId, rendimento: Number(rendimento), unidadeRendimento, ingredientes: itens, createdBy: req.user.id, updatedBy: req.user.id });
-    await Product.findByIdAndUpdate(produtoId, { $set: { tipoProduto, aFazer: tipoProduto === 'coz', producaoPropria: tipoProduto === 'producao', rendimentoPorReceita: tipoProduto === 'producao' ? Number(rendimento) : 1 } });
+    await Product.findByIdAndUpdate(produtoId, { $set: { tipoProduto: 'preparacao', modoOperacional, aFazer: modoOperacional === 'sob_demanda', producaoPropria: modoOperacional === 'lote', rendimentoPorReceita: modoOperacional === 'lote' ? Number(rendimento) : 1 } });
     await RecipeAudit.create({ receitaId: recipe._id, produtoId: produto._id, produtoNome: produto.nome, acao: 'criada', detalhes: 'Ficha técnica criada', usuarioId: req.user.id });
     await sincronizarCustoReceita(recipe._id);
-    res.status(201).json(await Recipe.findById(recipe._id).populate('produtoId', 'nome codigo unidadeVenda producaoPropria'));
+    const criada = await Recipe.findById(recipe._id).populate('produtoId', 'nome codigo unidadeVenda tipoProduto modoOperacional aFazer producaoPropria');
+    res.status(201).json({ ...criada.toObject(), tipoFicha: 'preparacao', modoOperacional });
   } catch (error) { res.status(400).json({ msg: error.message }); }
 });
 
@@ -131,13 +134,14 @@ router.put('/recipes/:id', onlyManager, [
   try {
     const recipe = await Recipe.findById(req.params.id);
     if (!recipe) return res.status(404).json({ msg: 'Receita não encontrada' });
-    const produtoDaFicha = await Product.findById(req.body.produtoId || recipe.produtoId).select('tipoProduto aFazer producaoPropria custoCalculado custo custoUnitario');
-    const tipoProdutoFicha = produtoDaFicha?.tipoProduto || (produtoDaFicha?.aFazer ? 'coz' : produtoDaFicha?.producaoPropria ? 'producao' : 'revenda');
+    const produtoDaFicha = await Product.findById(req.body.produtoId || recipe.produtoId).select('tipoProduto modoOperacional aFazer producaoPropria custoCalculado custo custoUnitario');
+    const modoOperacional = inferirModoOperacional(produtoDaFicha);
+    if (!ehPreparacao(produtoDaFicha) || !modoOperacional) return res.status(400).json({ msg: 'Produto sem modo de Preparação resolvido; defina o modo antes de editar a ficha técnica.' });
     const rendimentoInformado = req.body.rendimento === undefined ? recipe.rendimento : Number(req.body.rendimento);
-    if (tipoProdutoFicha === 'coz' && rendimentoInformado !== 1) return res.status(400).json({ msg: 'Ficha Coz deve ter rendimento igual a 1 porção' });
+    if (modoOperacional === 'sob_demanda' && rendimentoInformado !== 1) return res.status(400).json({ msg: 'Preparação sob demanda deve ter rendimento igual a 1 porção' });
     if (req.body.produtoId) {
-      const produto = await Product.findById(req.body.produtoId).select('tipo tipoProduto aFazer producaoPropria');
-      if (!produto || produto.tipo === 'insumo' || (!produto.aFazer && !produto.producaoPropria)) return res.status(400).json({ msg: 'Vincule a ficha a um produto Coz ou de produção própria' });
+      const produto = await Product.findById(req.body.produtoId).select('tipo tipoProduto modoOperacional aFazer producaoPropria');
+      if (!produto || produto.tipo === 'insumo' || !ehPreparacao(produto) || !inferirModoOperacional(produto)) return res.status(400).json({ msg: 'Vincule a ficha a um produto Preparação com modo operacional resolvido' });
     }
     const fields = {};
     ['nome', 'produtoId', 'unidadeRendimento'].forEach((key) => { if (req.body[key] !== undefined) fields[key] = req.body[key]; });
@@ -153,7 +157,7 @@ router.put('/recipes/:id', onlyManager, [
     }
     if (fields.ingredientes && !req.body.confirmarDivergenciaCusto) {
       const resultadoCusto = await calcularCustoDaFichaTecnica(fields.ingredientes);
-      const divisor = tipoProdutoFicha === 'coz' ? 1 : Number(rendimentoInformado || 1);
+      const divisor = modoOperacional === 'sob_demanda' ? 1 : Number(rendimentoInformado || 1);
       const custoNovo = resultadoCusto.fonte === 'insumo' ? Number(resultadoCusto.custoTotal) / divisor : null;
       const custoAnterior = Number(produtoDaFicha.custoCalculado || produtoDaFicha.custo || produtoDaFicha.custoUnitario || 0);
       if (custoAnterior > 0 && custoNovo !== null) {
@@ -165,12 +169,11 @@ router.put('/recipes/:id', onlyManager, [
     }
     fields.updatedBy = req.user.id;
     fields.updatedAt = new Date();
-    const updated = await Recipe.findByIdAndUpdate(req.params.id, { $set: fields }, { new: true, runValidators: true }).populate('produtoId', 'nome codigo unidadeVenda producaoPropria aFazer');
-    const produtoAtualizado = await Product.findById(updated.produtoId._id).select('aFazer nome');
-    await Product.findByIdAndUpdate(updated.produtoId._id, { $set: { producaoPropria: !produtoAtualizado?.aFazer && updated.ativa } });
+    const updated = await Recipe.findByIdAndUpdate(req.params.id, { $set: fields }, { new: true, runValidators: true }).populate('produtoId', 'nome codigo unidadeVenda tipoProduto modoOperacional producaoPropria aFazer');
     await RecipeAudit.create({ receitaId: updated._id, produtoId: updated.produtoId._id, produtoNome: updated.produtoId.nome, acao: 'alterada', detalhes: 'Ingredientes ou dados da ficha alterados', usuarioId: req.user.id });
     if (updated.ativa) await sincronizarCustoReceita(updated._id);
-    res.json(await Recipe.findById(updated._id).populate('produtoId', 'nome codigo unidadeVenda producaoPropria aFazer'));
+    const fichaAtualizada = await Recipe.findById(updated._id).populate('produtoId', 'nome codigo unidadeVenda tipoProduto modoOperacional producaoPropria aFazer');
+    res.json({ ...fichaAtualizada.toObject(), tipoFicha: 'preparacao', modoOperacional });
   } catch (error) { res.status(400).json({ msg: error.message }); }
 });
 
@@ -181,7 +184,7 @@ router.delete('/recipes/:id', onlyManager, async (req, res) => {
     const recipe = await Recipe.findByIdAndDelete(req.params.id);
     if (!recipe) return res.status(404).json({ msg: 'Receita não encontrada' });
     const produto = await Product.findById(recipe.produtoId).select('nome aFazer');
-    await Product.findByIdAndUpdate(recipe.produtoId, { $set: { producaoPropria: false, fichaTecnica: [] } });
+    await Product.findByIdAndUpdate(recipe.produtoId, { $set: { fichaTecnica: [] } });
     await RecipeAudit.create({ receitaId: recipe._id, produtoId: recipe.produtoId, produtoNome: produto?.nome || recipe.nome, acao: 'excluida', detalhes: 'Ficha técnica excluída; produto mantido', usuarioId: req.user.id });
     res.json({ msg: 'Receita removida com sucesso' });
   } catch (error) { res.status(400).json({ msg: error.message }); }
@@ -239,8 +242,8 @@ router.post('/produce', onlyManager, [body('receitas').isArray({ min: 1 }), body
         const { receitaId, quantidade } = item;
         const recipe = await Recipe.findOne({ _id: receitaId, ativa: true }).populate('produtoId').populate('ingredientes.produtoId').session(session);
         if (!recipe) throw new Error(`Receita não encontrada ou inativa: ${receitaId}`);
-        const tipoProduto = recipe.produtoId.tipoProduto || (recipe.produtoId.aFazer ? 'coz' : recipe.produtoId.producaoPropria ? 'producao' : 'revenda');
-        if (tipoProduto !== 'producao') throw new Error(`Produtos Coz não podem ser lançados em produção: ${recipe.nome}`);
+        const modoOperacional = inferirModoOperacional(recipe.produtoId);
+        if (modoOperacional !== 'lote') throw new Error(`A receita "${recipe.nome}" não está configurada para produção em lote.`);
         const batches = Number(quantidade);
         const consumption = recipe.ingredientes.map((ingrediente) => ({ product: ingrediente.produtoId, quantity: Number(ingrediente.quantidade) * batches, unit: ingrediente.unidade }));
         const snapshots = [];
@@ -268,20 +271,21 @@ router.get('/dashboard', async (req, res) => {
   try {
     const [products, recipes, recentProductions, lowStock] = await Promise.all([
       Product.find({ $or: [{ tipo: 'insumo' }, { tipo: 'venda', usavelEmReceita: true }] }).select('nome codigo tipo usavelEmReceita estoque estoqueInsumos estoqueEmbalagens estoqueConteudoAberto estoqueMinimoInsumos estoqueMinimoEmbalagens unidadeCompra unidadeConteudo conteudoPorEmbalagem unidadeVenda'),
-      Recipe.find({ ativa: true }).populate('produtoId', 'nome estoque unidadeVenda tipoProduto aFazer producaoPropria').populate('ingredientes.produtoId', 'nome estoqueInsumos estoqueEmbalagens estoqueConteudoAberto unidadeConteudo conteudoPorEmbalagem'),
+      Recipe.find({ ativa: true }).populate('produtoId', 'nome estoque unidadeVenda tipoProduto modoOperacional aFazer producaoPropria').populate('ingredientes.produtoId', 'nome estoqueInsumos estoqueEmbalagens estoqueConteudoAberto unidadeConteudo conteudoPorEmbalagem'),
       Production.find().sort({ createdAt: -1 }).limit(10),
       Product.find({ $or: [{ tipo: 'insumo', $expr: { $lte: ['$estoqueEmbalagens', { $ifNull: ['$estoqueMinimoEmbalagens', '$estoqueMinimoInsumos'] }] } }, { tipo: 'venda', usavelEmReceita: true, $expr: { $lte: ['$estoque', { $ifNull: ['$estoqueMinimo', 0] }] } }] }).select('nome codigo tipo usavelEmReceita estoque estoqueInsumos estoqueEmbalagens estoqueConteudoAberto estoqueMinimoInsumos estoqueMinimoEmbalagens unidadeCompra unidadeConteudo conteudoPorEmbalagem unidadeVenda'),
     ]);
     const formatNumber = (value) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
     const possible = recipes.map((recipe) => {
-      const tipoProduto = recipe.produtoId?.tipoProduto || (recipe.produtoId?.aFazer ? 'coz' : recipe.produtoId?.producaoPropria ? 'producao' : 'revenda');
-      if (tipoProduto === 'producao') {
+      const modoOperacional = inferirModoOperacional(recipe.produtoId);
+      if (modoOperacional === 'lote') {
         const estoqueAtual = Number(recipe.produtoId?.estoque || 0);
         return {
           receitaId: recipe._id,
           receitaNome: recipe.nome,
           produtoNome: recipe.produtoId?.nome,
-          tipoProduto,
+          tipoProduto: 'preparacao',
+          modoOperacional,
           producoesPossiveis: estoqueAtual,
           rendimentoPorProducao: recipe.rendimento,
           unidade: recipe.unidadeRendimento,
@@ -309,7 +313,8 @@ router.get('/dashboard', async (req, res) => {
         receitaId: recipe._id,
         receitaNome: recipe.nome,
         produtoNome: recipe.produtoId?.nome,
-        tipoProduto,
+        tipoProduto: 'preparacao',
+        modoOperacional,
         producoesPossiveis,
         rendimentoPorProducao: recipe.rendimento,
         unidade: recipe.unidadeRendimento,

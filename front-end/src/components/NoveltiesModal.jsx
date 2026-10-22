@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api.jsx';
 import { useToast } from '../components/Toast.jsx';
-import { AuthContext } from '../context/AuthContextDefinition.jsx';
 
 const NoveltiesModal = ({ onClose }) => {
-  const { user } = useContext(AuthContext);
   const [novelties, setNovelties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -17,14 +15,14 @@ const NoveltiesModal = ({ onClose }) => {
           params: { type: 'venda', status: 'ativo' }
         });
         setNovelties(response.data || []);
-      } catch (error) {
+      } catch {
         showToast('Erro ao carregar novelties', 'error');
       } finally {
         setLoading(false);
       }
     };
     loadNovelties();
-  }, []);
+  }, [showToast]);
 
   const toggleModal = () => setShowModal(!showModal);
 
@@ -83,7 +81,7 @@ const NoveltiesModal = ({ onClose }) => {
                     <div style={{ width: 80, height: 80, background: 'var(--border-light)', borderRadius: 12, margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: 'var(--text-secondary)' }}>
                       Ⓝ
                     </div>
-                    <h4 style={{ fontSize: 14, fontWeight: 600, margin: '4px 0 2px' }}}>{product.nome}</h4>
+                    <h4 style={{ fontSize: 14, fontWeight: 600, margin: '4px 0 2px' }}>{product.nome}</h4>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0' }}>
                       R$ {Number(product.precoVenda || 0).toFixed(2).replace('.', ',')}
                     </p>

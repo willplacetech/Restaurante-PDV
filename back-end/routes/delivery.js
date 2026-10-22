@@ -1,13 +1,62 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const DeliverySettings = require('../models/DeliverySettings');
 const Entregador = require('../models/Entregador');
 const DeliveryOrder = require('../models/DeliveryOrder');
 const Order = require('../models/Order');
 const Comanda = require('../models/Comanda');
 const Product = require('../models/Product');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
 const { recordAuditEvent } = require('../services/auditLog');
 const router = express.Router();
+
+const transicoes = {
+  pendente: ['pronto', 'cancelado'],
+  pronto: ['despachado', 'cancelado'],
+  despachado: ['a_caminho', 'entregue', 'cancelado'],
+  a_caminho: ['entregue', 'cancelado'],
+  entregue: [],
+  cancelado: [],
+};
+
+const obterEntregadorAutenticado = (req) => (
+  req.user.role === 'entregador'
+    ? Entregador.findOne({ usuarioId: req.user._id, ativo: true }).select('_id')
+    : null
+);
+
+const obterPedidoAcessivel = async (req, id) => {
+  const entregador = await obterEntregadorAutenticado(req);
+  if (req.user.role === 'entregador' && !entregador) return null;
+  return DeliveryOrder.findOne({
+    _id: id,
+    ...(entregador ? { entregadorId: entregador._id } : {}),
+  });
+};
+
+const salvarTransicao = (pedido, status, fields = {}) => DeliveryOrder.findOneAndUpdate(
+  { _id: pedido._id, status: pedido.status },
+  {
+    $set: { status, atualizadoEm: Date.now(), ...fields },
+    $push: { statusHistorico: { status: pedido.status, data: new Date() } },
+  },
+  { new: true, runValidators: true }
+);
+
+const transicaoInvalida = (statusAtual, novoStatus) => (
+  !transicoes[statusAtual]?.includes(novoStatus)
+);
+
+const validarUsuarioEntregador = async (usuarioId, entregadorAtualId) => {
+  if (!mongoose.isValidObjectId(usuarioId)) return { erro: 'Selecione uma conta de entregador válida' };
+  const usuario = await User.findOne({ _id: usuarioId, role: 'entregador', active: true });
+  if (!usuario) return { erro: 'A conta selecionada não é um entregador ativo' };
+  const filtroDuplicado = { usuarioId: usuario._id };
+  if (entregadorAtualId) filtroDuplicado._id = { $ne: entregadorAtualId };
+  if (await Entregador.exists(filtroDuplicado)) return { erro: 'Esta conta já está vinculada a outro entregador' };
+  return { usuario };
+};
 
 // GET /api/delivery/configuracao - Configurações de entrega
 router.get('/configuracao', auth, async (req, res) => {
@@ -38,10 +87,31 @@ router.patch('/configuracao', auth, auth.allowRoles('admin', 'gerente'), async (
   }
 });
 
+// GET /api/delivery/entregadores/usuarios-disponiveis - Listar contas sem perfil vinculado
+router.get('/entregadores/usuarios-disponiveis', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
+  try {
+    const vinculados = await Entregador.find({
+      usuarioId: { $exists: true, $ne: null },
+      ...(req.query.entregadorId ? { _id: { $ne: req.query.entregadorId } } : {}),
+    }).distinct('usuarioId');
+    const usuarios = await User.find({
+      role: 'entregador',
+      active: true,
+      _id: { $nin: vinculados },
+    }).select('username email').sort({ username: 1 });
+    res.json(usuarios);
+  } catch (error) {
+    res.status(500).json({ msg: 'Erro ao listar contas disponíveis' });
+  }
+});
+
 // GET /api/delivery/entregadores - Listar entregadores
 router.get('/entregadores', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
-    const entregadores = await Entregador.find().sort({ nome: 1 });
+    const filtro = req.user.role === 'entregador'
+      ? { usuarioId: req.user._id, ativo: true }
+      : {};
+    const entregadores = await Entregador.find(filtro).populate('usuarioId', 'name username email').sort({ nome: 1 });
     res.json(entregadores);
   } catch (error) {
     res.status(500).json({ msg: 'Erro ao listar entregadores' });
@@ -51,8 +121,10 @@ router.get('/entregadores', auth, auth.allowRoles('admin', 'gerente', 'entregado
 // POST /api/delivery/entregadores - Cadastrar entregador
 router.post('/entregadores', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
   try {
-    const { nome, telefone, senha, ativo } = req.body;
-    const entregador = new Entregador({ nome, telefone, senha, ativo });
+    const { nome, telefone, senha, ativo, usuarioId } = req.body;
+    const validacao = await validarUsuarioEntregador(usuarioId);
+    if (validacao.erro) return res.status(400).json({ msg: validacao.erro });
+    const entregador = new Entregador({ nome, telefone, senha, ativo, usuarioId: validacao.usuario._id });
     await entregador.save();
 
     try {
@@ -65,6 +137,7 @@ router.post('/entregadores', auth, auth.allowRoles('admin', 'gerente'), async (r
 
     res.status(201).json(entregador);
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ msg: 'Esta conta já está vinculada a outro entregador' });
     res.status(500).json({ msg: 'Erro ao cadastrar entregador' });
   }
 });
@@ -72,13 +145,20 @@ router.post('/entregadores', auth, auth.allowRoles('admin', 'gerente'), async (r
 // PUT /api/delivery/entregadores/:id - Atualizar entregador
 router.put('/entregadores/:id', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
   try {
-    const { nome, telefone, senha, ativo } = req.body;
-    const entregador = await Entregador.findByIdAndUpdate(
-      req.params.id,
-      { nome, telefone, senha, ativo, atualizadoEm: Date.now() },
-      { new: true }
-    );
+    const entregador = await Entregador.findById(req.params.id);
     if (!entregador) return res.status(404).json({ msg: 'Entregador não encontrado' });
+    const { nome, telefone, senha, ativo, usuarioId } = req.body;
+    if (usuarioId !== undefined && String(usuarioId) !== String(entregador.usuarioId || '')) {
+      const validacao = await validarUsuarioEntregador(usuarioId, entregador._id);
+      if (validacao.erro) return res.status(400).json({ msg: validacao.erro });
+      entregador.usuarioId = validacao.usuario._id;
+    }
+    if (nome !== undefined) entregador.nome = nome;
+    if (telefone !== undefined) entregador.telefone = telefone;
+    if (senha !== undefined && senha !== '') entregador.senha = senha;
+    if (ativo !== undefined) entregador.ativo = ativo;
+    entregador.atualizadoEm = Date.now();
+    await entregador.save();
 
     try {
       await recordAuditEvent({
@@ -90,6 +170,7 @@ router.put('/entregadores/:id', auth, auth.allowRoles('admin', 'gerente'), async
 
     res.json(entregador);
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ msg: 'Esta conta já está vinculada a outro entregador' });
     res.status(500).json({ msg: 'Erro ao atualizar entregador' });
   }
 });
@@ -125,6 +206,8 @@ router.get('/pedidos', auth, auth.allowRoles('admin', 'gerente', 'entregador'), 
     let query = {};
     if (status) query.status = status;
     if (entregadorId) query.entregadorId = entregadorId;
+    const entregador = await obterEntregadorAutenticado(req);
+    if (req.user.role === 'entregador') query.entregadorId = entregador?._id || null;
     const pedidos = await DeliveryOrder.find(query).populate('entregadorId', 'nome').sort({ criadoEm: -1 });
     res.json(pedidos);
   } catch (error) {
@@ -166,30 +249,31 @@ router.post('/pedidos', auth, auth.allowRoles('admin', 'gerente', 'operador'), a
 router.post('/pedidos/:id/despachar', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
   try {
     const { entregadorId } = req.body;
-    const pedido = await DeliveryOrder.findByIdAndUpdate(
-      req.params.id,
-      { 
-        status: 'despachado', 
-        statusHistorico: [
-          ...( pedido.statusHistorico || [] ),
-          { status: pedido.status, data: new Date() }
-        ],
-        entregadorId,
-        atualizadoEm: Date.now()
-      },
-      { new: true }
-    );
+    const pedido = await DeliveryOrder.findById(req.params.id);
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });
+    if (transicaoInvalida(pedido.status, 'despachado')) {
+      return res.status(409).json({ msg: `Não é possível despachar um pedido com status ${pedido.status}` });
+    }
+    if (!mongoose.isValidObjectId(entregadorId)) {
+      return res.status(400).json({ msg: 'Selecione um entregador válido' });
+    }
+    const entregador = await Entregador.findOne({ _id: entregadorId, ativo: true }).populate('usuarioId');
+    if (!entregador || !entregador.usuarioId || entregador.usuarioId.role !== 'entregador' || !entregador.usuarioId.active) {
+      return res.status(400).json({ msg: 'O entregador deve estar vinculado a uma conta ativa' });
+    }
+    const statusAnterior = pedido.status;
+    const atualizado = await salvarTransicao(pedido, 'despachado', { entregadorId: entregador._id });
+    if (!atualizado) return res.status(409).json({ msg: 'O pedido foi atualizado por outra operação. Recarregue e tente novamente.' });
 
     try {
       await recordAuditEvent({
         req,
         action: 'delivery.pedido.despachar',
-        details: { pedidoId: String(pedido._id), entregadorId, statusAnterior: 'pendente', statusNovo: 'despachado' },
+        details: { pedidoId: String(atualizado._id), entregadorId: String(entregador._id), statusAnterior, statusNovo: 'despachado' },
       });
     } catch (_) {}
 
-    res.json(pedido);
+    res.json(atualizado);
   } catch (error) {
     res.status(500).json({ msg: 'Erro ao despachar pedido' });
   }
@@ -198,29 +282,24 @@ router.post('/pedidos/:id/despachar', auth, auth.allowRoles('admin', 'gerente'),
 // POST /api/delivery/pedidos/:id/pronto - Marcar pedido como pronto
 router.post('/pedidos/:id/pronto', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
-    const pedido = await DeliveryOrder.findByIdAndUpdate(
-      req.params.id,
-      { 
-        status: 'pronto', 
-        statusHistorico: [
-          ...( pedido.statusHistorico || [] ),
-          { status: pedido.status, data: new Date() }
-        ],
-        atualizadoEm: Date.now()
-      },
-      { new: true }
-    );
+    const pedido = await obterPedidoAcessivel(req, req.params.id);
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });
+    if (transicaoInvalida(pedido.status, 'pronto')) {
+      return res.status(409).json({ msg: `Não é possível marcar como pronto um pedido com status ${pedido.status}` });
+    }
+    const statusAnterior = pedido.status;
+    const atualizado = await salvarTransicao(pedido, 'pronto');
+    if (!atualizado) return res.status(409).json({ msg: 'O pedido foi atualizado por outra operação. Recarregue e tente novamente.' });
 
     try {
       await recordAuditEvent({
         req,
         action: 'delivery.pedido.pronto',
-        details: { pedidoId: String(pedido._id), statusAnterior: 'despachado', statusNovo: 'pronto' },
+        details: { pedidoId: String(atualizado._id), statusAnterior, statusNovo: 'pronto' },
       });
     } catch (_) {}
 
-    res.json(pedido);
+    res.json(atualizado);
   } catch (error) {
     res.status(500).json({ msg: 'Erro ao marcar como pronto' });
   }
@@ -230,29 +309,24 @@ router.post('/pedidos/:id/pronto', auth, auth.allowRoles('admin', 'gerente', 'en
 router.post('/pedidos/:id/cancelar', auth, auth.allowRoles('admin', 'gerente', 'operador', 'entregador'), async (req, res) => {
   try {
     const { motivo } = req.body;
-    const pedido = await DeliveryOrder.findByIdAndUpdate(
-      req.params.id,
-      { 
-        status: 'cancelado', 
-        statusHistorico: [
-          ...( pedido.statusHistorico || [] ),
-          { status: pedido.status, data: new Date() }
-        ],
-        atualizadoEm: Date.now()
-      },
-      { new: true }
-    );
+    const pedido = await obterPedidoAcessivel(req, req.params.id);
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });
+    if (transicaoInvalida(pedido.status, 'cancelado')) {
+      return res.status(409).json({ msg: `Não é possível cancelar um pedido com status ${pedido.status}` });
+    }
+    const statusAnterior = pedido.status;
+    const atualizado = await salvarTransicao(pedido, 'cancelado');
+    if (!atualizado) return res.status(409).json({ msg: 'O pedido foi atualizado por outra operação. Recarregue e tente novamente.' });
 
     try {
       await recordAuditEvent({
         req,
         action: 'delivery.pedido.cancelar',
-        details: { pedidoId: String(pedido._id), motivo, statusAnterior: pedido.statusHistorico?.[pedido.statusHistorico.length - 1]?.status || 'pendente', statusNovo: 'cancelado' },
+        details: { pedidoId: String(atualizado._id), motivo, statusAnterior, statusNovo: 'cancelado' },
       });
     } catch (_) {}
 
-    res.json(pedido);
+    res.json(atualizado);
   } catch (error) {
     res.status(500).json({ msg: 'Erro ao cancelar pedido' });
   }
@@ -262,26 +336,28 @@ router.post('/pedidos/:id/cancelar', auth, auth.allowRoles('admin', 'gerente', '
 router.post('/pedidos/:id/status', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
     const { novoStatus } = req.body;
-    const pedidoAntigo = await DeliveryOrder.findById(req.params.id);
-    if (!pedidoAntigo) return res.status(404).json({ msg: 'Pedido não encontrado' });
-    const statusAnterior = pedidoAntigo.status;
-
-    const pedido = await DeliveryOrder.findByIdAndUpdate(
-      req.params.id,
-      { status: novoStatus, statusHistorico: [...(pedidoAntigo.statusHistorico || []), { status: pedidoAntigo.status, data: new Date() }], atualizadoEm: Date.now() },
-      { new: true }
-    );
+    if (!Object.hasOwn(transicoes, novoStatus)) return res.status(400).json({ msg: 'Status inválido' });
+    const pedido = await obterPedidoAcessivel(req, req.params.id);
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });
+    if (req.user.role === 'entregador' && !['a_caminho', 'entregue'].includes(novoStatus)) {
+      return res.status(403).json({ msg: 'Entregadores podem marcar pedidos a caminho ou entregues' });
+    }
+    if (transicaoInvalida(pedido.status, novoStatus)) {
+      return res.status(409).json({ msg: `Transição de ${pedido.status} para ${novoStatus} não permitida` });
+    }
+    const statusAnterior = pedido.status;
+    const atualizado = await salvarTransicao(pedido, novoStatus);
+    if (!atualizado) return res.status(409).json({ msg: 'O pedido foi atualizado por outra operação. Recarregue e tente novamente.' });
 
     try {
       await recordAuditEvent({
         req,
         action: 'delivery.pedido.status',
-        details: { pedidoId: String(pedido._id), statusAnterior, statusNovo: novoStatus },
+        details: { pedidoId: String(atualizado._id), statusAnterior, statusNovo: novoStatus },
       });
     } catch (_) {}
 
-    res.json(pedido);
+    res.json(atualizado);
   } catch (error) {
     res.status(500).json({ msg: 'Erro ao atualizar status' });
   }
@@ -290,8 +366,9 @@ router.post('/pedidos/:id/status', auth, auth.allowRoles('admin', 'gerente', 'en
 // POST /api/delivery/pedidos/:id/enviar-whatsapp - Enviar WhatsApp
 router.post('/pedidos/:id/enviar-whatsapp', auth, auth.allowRoles('admin', 'gerente', 'operador', 'entregador'), async (req, res) => {
   try {
-    const pedido = await DeliveryOrder.findById(req.params.id).populate('entregadorId', 'nome');
+    const pedido = await obterPedidoAcessivel(req, req.params.id);
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });
+    await pedido.populate('entregadorId', 'nome');
     const mensagem = pedido.entregadorId 
       ? `Entregador: ${pedido.entregadorId.nome}. ${pedido.origem.nomeCliente} · ${pedido.origem.endereco.rua}, ${pedido.origem.endereco.numero} · Total: R$ ${pedido.valorTotal}`
       : `Cliente: ${pedido.origem.nomeCliente}. ${pedido.origem.endereco.rua}, ${pedido.origem.endereco.numero} · Total: R$ ${pedido.valorTotal}`;

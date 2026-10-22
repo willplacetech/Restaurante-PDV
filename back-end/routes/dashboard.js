@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const PaymentSettings = require('../models/PaymentSettings');
 const auth = require('../middleware/auth');
 const { quantidadeNaUnidadeBase } = require('../utils/quantidade');
+const { parsePagination, paginationMetadata } = require('../utils/pagination');
 
 const router = express.Router();
 const TIME_ZONE = 'America/Sao_Paulo';
@@ -21,12 +22,43 @@ const dataSaoPaulo = (value = new Date()) => {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
 
+const inicioDataCivil = (data) => new Date(`${data}T00:00:00-03:00`);
+
+const periodoRelatorio = (query) => {
+  const hoje = dataSaoPaulo();
+  const inicioPadrao = `${hoje.slice(0, 7)}-01`;
+  const semFiltro = query.dataInicio === undefined && query.dataFim === undefined;
+  const dataInicio = semFiltro ? inicioPadrao : query.dataInicio;
+  const dataFim = semFiltro ? hoje : query.dataFim;
+  const dataValida = (data) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) return false;
+    const [ano, mes, dia] = data.split('-').map(Number);
+    const dataVerificada = new Date(Date.UTC(ano, mes - 1, dia));
+    return dataVerificada.getUTCFullYear() === ano
+      && dataVerificada.getUTCMonth() === mes - 1
+      && dataVerificada.getUTCDate() === dia;
+  };
+
+  if (!dataValida(dataInicio) || !dataValida(dataFim) || dataInicio > dataFim) {
+    throw Object.assign(new Error('Informe um período válido (formato YYYY-MM-DD)'), { statusCode: 400 });
+  }
+
+  const inicio = inicioDataCivil(dataInicio);
+  const fim = inicioDataCivil(dataFim);
+  fim.setUTCDate(fim.getUTCDate() + 1);
+  if (fim - inicio > 366 * 24 * 60 * 60 * 1000) {
+    throw Object.assign(new Error('O período máximo permitido é de um ano'), { statusCode: 400 });
+  }
+  return { dataInicio, dataFim, inicio, fim };
+};
+
 const formatarDataPtBr = (value) => {
   const data = new Date(value);
   return data.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: TIME_ZONE,
   });
 };
 
@@ -67,34 +99,26 @@ const periodoHistorico = (semanaInicio) => {
 };
 
 const inicioDoPeriodo = (periodo) => {
-  if (periodo === 'dia') return inicioHojeSaoPaulo();
-  const agora = new Date();
-  const inicio = new Date(agora);
+  const hoje = dataSaoPaulo();
+  const inicio = inicioDataCivil(hoje);
+  if (periodo === 'dia') return inicio;
   if (periodo === 'semana') {
-    inicio.setHours(0, 0, 0, 0);
-    inicio.setDate(inicio.getDate() - inicio.getDay());
+    const diasDesdeSegunda = (inicio.getUTCDay() + 6) % 7;
+    inicio.setUTCDate(inicio.getUTCDate() - diasDesdeSegunda);
   }
   if (periodo === 'mes') {
-    inicio.setHours(0, 0, 0, 0);
-    inicio.setDate(1);
+    return inicioDataCivil(`${hoje.slice(0, 7)}-01`);
   }
   return inicio;
 };
 
-const fimDoMesAtual = () => {
-  const agora = new Date();
-  return new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
-};
-
+const inicioDoMesAtual = () => inicioDataCivil(`${dataSaoPaulo().slice(0, 7)}-01`);
 const inicioDoMesAnterior = () => {
-  const agora = new Date();
-  return new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+  const [ano, mes] = dataSaoPaulo().slice(0, 7).split('-').map(Number);
+  return new Date(Date.UTC(ano, mes - 2, 1, 3));
 };
 
-const fimDoMesAnterior = () => {
-  const agora = new Date();
-  return new Date(agora.getFullYear(), agora.getMonth(), 1);
-};
+const fimDoMesAnterior = () => inicioDoMesAtual();
 
 router.use(auth);
 router.use((req, res, next) => {
@@ -220,6 +244,12 @@ router.get('/urgencias', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
+    const pagination = parsePagination(req.query, {
+      sortFields: ['nome', 'createdAt'],
+      defaultSort: 'nome',
+      defaultOrder: 'asc',
+    });
+    const range = periodoRelatorio(req.query);
     const periodos = ['dia', 'semana', 'mes'];
     const inicioInsights = new Date();
     inicioInsights.setDate(inicioInsights.getDate() - 90);
@@ -235,9 +265,9 @@ router.get('/', async (req, res) => {
       })),
       Comanda.countDocuments({ status: 'aberta' }),
       Order.find({ createdAt: { $gte: inicioDoPeriodo('dia') } }).sort({ createdAt: -1 }).select('numero total status utilizacaoInterna clienteNome createdAt itens pagamentos'),
-      Order.find({ createdAt: { $gte: inicioDoPeriodo('mes'), $lt: fimDoMesAtual() } }).select('numero total subtotal desconto status utilizacaoInterna clienteId clienteNome clienteTelefone createdAt itens pagamentos tipoAtendimento'),
+      Order.find({ createdAt: { $gte: range.inicio, $lt: range.fim } }).select('numero total subtotal desconto status utilizacaoInterna clienteId clienteNome clienteTelefone createdAt itens pagamentos tipoAtendimento'),
       Order.find({ 'pagamentos.dataPagamento': { $gte: inicioDoPeriodo('dia') } }).select('pagamentos'),
-      Order.find({ 'pagamentos.dataPagamento': { $gte: inicioDoPeriodo('mes'), $lt: fimDoMesAtual() } }).select('pagamentos'),
+      Order.find({ 'pagamentos.dataPagamento': { $gte: range.inicio, $lt: range.fim } }).select('pagamentos status utilizacaoInterna'),
       Customer.countDocuments(),
       Customer.find().sort({ createdAt: -1 }).limit(8).select('nome telefone createdAt cafesFidelidade'),
       Product.find({ tipo: 'venda' }).select('nome codigo preco custo estoque categoria'),
@@ -261,7 +291,7 @@ router.get('/', async (req, res) => {
     const vendasPorDia = new Map();
     vendasMes.forEach((pedido) => {
       if (pedido.clienteNome) clientesMes.add(pedido.clienteNome);
-      const dia = new Date(pedido.createdAt).toLocaleDateString('pt-BR');
+      const dia = dataSaoPaulo(pedido.createdAt);
       vendasPorDia.set(dia, (vendasPorDia.get(dia) || 0) + valorLiquidoPedido(pedido));
       (pedido.itens || []).forEach((item) => {
         const atual = produtosMes.get(item.nome) || { nome: item.nome, quantidade: 0, total: 0 };
@@ -270,7 +300,7 @@ router.get('/', async (req, res) => {
         produtosMes.set(item.nome, atual);
       });
     });
-    recebimentosMes.forEach((pedido) => (pedido.pagamentos || []).filter((pagamento) => pagamento.tipo !== 'credito_loja' && new Date(pagamento.dataPagamento) >= inicioDoPeriodo('mes') && new Date(pagamento.dataPagamento) < fimDoMesAtual()).forEach((pagamento) => {
+    recebimentosMes.filter((pedido) => pedido.status !== 'cancelado' && !pedido.utilizacaoInterna).forEach((pedido) => (pedido.pagamentos || []).filter((pagamento) => pagamento.tipo !== 'credito_loja' && new Date(pagamento.dataPagamento) >= range.inicio && new Date(pagamento.dataPagamento) < range.fim).forEach((pagamento) => {
       const atual = pagamentosMes.get(pagamento.tipo) || { bruto: 0, taxa: 0, total: 0 };
       const valores = pagamentoTaxa(pagamento);
       atual.bruto += valores.bruto;
@@ -289,25 +319,40 @@ router.get('/', async (req, res) => {
       atual.unidades += Number(item.quantidade || 0);
       rankingDescontos.set(String(item.produtoId), atual);
     }));
-    const recebidoMes = vendasMes.reduce((total, pedido) => total + pedidoRecebidoTotal(pedido), 0);
-    const taxasMes = vendasMes.reduce((total, pedido) => total + (pedido.pagamentos || []).filter((pagamento) => pagamento.tipo !== 'credito_loja').reduce((soma, pagamento) => soma + pagamentoTaxa(pagamento).taxa, 0), 0);
+    const recebidoMes = [...pagamentosMes.values()].reduce((total, pagamento) => total + pagamento.bruto, 0);
+    const taxasMes = [...pagamentosMes.values()].reduce((total, pagamento) => total + pagamento.taxa, 0);
     const statusMes = pedidosMes.reduce((status, pedido) => { status[pedido.status] = (status[pedido.status] || 0) + 1; return status; }, {});
-    const clientesRelatorio = new Map(clientesRecentes.map((cliente) => [String(cliente._id), {
-      id: cliente._id,
-      nome: cliente.nome,
-      telefone: cliente.telefone || '',
-      pedidos: 0,
-      total: 0,
-      recebido: 0,
-      ultimaCompra: null,
-    }]));
-    const todosClientes = await Customer.find().sort({ nome: 1 }).select('nome telefone createdAt cafesFidelidade');
-    todosClientes.forEach((cliente) => {
-      if (!clientesRelatorio.has(String(cliente._id))) clientesRelatorio.set(String(cliente._id), { id: cliente._id, nome: cliente.nome, telefone: cliente.telefone || '', pedidos: 0, total: 0, recebido: 0, ultimaCompra: null });
+    const clientesPorVenda = new Map();
+    vendasMes.forEach((pedido) => {
+      if (!pedido.clienteId) return;
+      const id = String(pedido.clienteId);
+      const metricas = clientesPorVenda.get(id) || { pedidos: 0, total: 0, recebido: 0, ultimaCompra: null };
+      metricas.pedidos += 1;
+      metricas.total += Number(pedido.total || 0);
+      metricas.recebido += pedidoRecebidoTotal(pedido);
+      if (!metricas.ultimaCompra || new Date(pedido.createdAt) > metricas.ultimaCompra) {
+        metricas.ultimaCompra = new Date(pedido.createdAt);
+      }
+      clientesPorVenda.set(id, metricas);
     });
-    const relatorioClientes = [...clientesRelatorio.values()].map((cliente) => ({ ...cliente, pendente: Math.max(0, cliente.total - cliente.recebido) })).sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+    const clientesPagina = await Customer.find()
+      .sort({ [pagination.sort]: pagination.order === 'desc' ? -1 : 1 })
+      .skip(pagination.skip)
+      .limit(pagination.pageSize)
+      .select('nome telefone createdAt cafesFidelidade')
+      .lean();
+    const relatorioClientes = clientesPagina.map((cliente) => {
+      const metricas = clientesPorVenda.get(String(cliente._id)) || { pedidos: 0, total: 0, recebido: 0, ultimaCompra: null };
+      return {
+        id: cliente._id,
+        nome: cliente.nome,
+        telefone: cliente.telefone || '',
+        ...metricas,
+        pendente: Math.max(0, metricas.total - metricas.recebido),
+      };
+    });
     const relatorioMes = {
-      periodo: `${inicioDoPeriodo('mes').toLocaleDateString('pt-BR')} a ${new Date(fimDoMesAtual().getTime() - 1).toLocaleDateString('pt-BR')}`,
+      periodo: `${formatarDataPtBr(range.inicio)} a ${formatarDataPtBr(new Date(range.fim.getTime() - 1))}`,
       pedidos: pedidosMes.length,
       vendas: vendasMes.length,
       itens: vendasMes.reduce((total, pedido) => total + (pedido.itens || []).reduce((soma, item) => soma + quantidadeNaUnidadeBase(item), 0), 0),
@@ -316,7 +361,11 @@ router.get('/', async (req, res) => {
       pendente: vendasMes.reduce((total, pedido) => total + pedidoEmAReceber(pedido), 0),
       ticketMedio: vendasMes.length ? totalMes / vendasMes.length : 0,
       status: statusMes,
-      pagamentos: [...pagamentosMes.entries()].map(([tipo, valores]) => ({ tipo, ...valores })).sort((a, b) => b.total - a.total),
+      pagamentos: [...pagamentosMes.entries()].map(([tipo, valores]) => ({
+        tipo,
+        ...valores,
+        taxaPercentual: valores.bruto ? (valores.taxa / valores.bruto) * 100 : 0,
+      })).sort((a, b) => b.total - a.total),
       taxasCartao: taxasMes,
       produtos: [...produtosMes.values()].sort((a, b) => b.quantidade - a.quantidade).slice(0, 10),
       clientes: clientesMes.size,
@@ -392,8 +441,32 @@ router.get('/', async (req, res) => {
       fidelidade: { clientesComCompra, clientesRecorrentes, taxaRecorrencia: clientesComCompra ? (clientesRecorrentes / clientesComCompra) * 100 : 0, clientes: clientesFrequentes },
     };
     const configuracaoTaxas = await PaymentSettings.findOne({ chave: 'principal' }).lean();
-    res.json({ taxasCartao: configuracaoTaxas ? { cartao_credito: Number(configuracaoTaxas.cartao_credito || 0), cartao_debito: Number(configuracaoTaxas.cartao_debito || 0) } : null, periodos: Object.fromEntries(periodMetrics.map((metric) => [metric.periodo, metric])), comandasAbertas: openCommands, pedidosHoje: pedidosDia.slice(0, 30), clientesCadastrados, clientesRecentes, vendasHoje: { pedidos: vendasHoje.length, itens: vendasHojeItens, total: vendasHojeTotal, recebido: vendasHojeRecebido, pendente: vendasHojePendente }, relatorioMes, relatorioClientes: { periodo: relatorioMes.periodo, totalCadastrados: todosClientes.length, clientesComCompra: relatorioClientes.filter((cliente) => cliente.pedidos > 0).length, totalVendido: relatorioClientes.reduce((total, cliente) => total + cliente.total, 0), totalRecebido: relatorioClientes.reduce((total, cliente) => total + cliente.recebido, 0), totalPendente: relatorioClientes.reduce((total, cliente) => total + cliente.pendente, 0), clientes: relatorioClientes }, insights, atualizadoEm: new Date() });
-  } catch (error) { res.status(500).json({ msg: error.message }); }
+    res.json({
+      taxasCartao: configuracaoTaxas ? { cartao_credito: Number(configuracaoTaxas.cartao_credito || 0), cartao_debito: Number(configuracaoTaxas.cartao_debito || 0) } : null,
+      periodos: Object.fromEntries(periodMetrics.map((metric) => [metric.periodo, metric])),
+      comandasAbertas: openCommands,
+      pedidosHoje: pedidosDia.slice(0, 30),
+      clientesCadastrados,
+      clientesRecentes,
+      vendasHoje: { pedidos: vendasHoje.length, itens: vendasHojeItens, total: vendasHojeTotal, recebido: vendasHojeRecebido, pendente: vendasHojePendente },
+      relatorioMes,
+      relatorioClientes: {
+        periodo: relatorioMes.periodo,
+        totalCadastrados: clientesCadastrados,
+        clientesComCompra: clientesPorVenda.size,
+        totalVendido: [...clientesPorVenda.values()].reduce((total, cliente) => total + cliente.total, 0),
+        totalRecebido: [...clientesPorVenda.values()].reduce((total, cliente) => total + cliente.recebido, 0),
+        totalPendente: [...clientesPorVenda.values()].reduce((total, cliente) => total + Math.max(0, cliente.total - cliente.recebido), 0),
+        clientes: relatorioClientes,
+      },
+      pagination: paginationMetadata(clientesCadastrados, pagination.page, pagination.pageSize),
+      range: { dataInicio: range.dataInicio, dataFim: range.dataFim },
+      insights,
+      atualizadoEm: new Date(),
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ msg: error.statusCode ? error.message : 'Não foi possível carregar o dashboard' });
+  }
 });
 
 module.exports = router;

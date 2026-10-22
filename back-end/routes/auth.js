@@ -1,10 +1,17 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const auth = require('../middleware/auth');
 const { recordAuditEvent } = require('../services/auditLog');
+const {
+  createAuthSession,
+  revokeAuthSession,
+  revokeUserSessions,
+  invalidateUserSessions,
+} = require('../utils/authSessions');
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -13,8 +20,6 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Muitas tentativas de login. Tente novamente em alguns minutos.' },
 });
-
-const { auditActions } = require('../services/auditLog');
 
 router.post('/login', loginLimiter, async (req, res) => {
   try {
@@ -40,7 +45,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ message: 'Nome de usuário, e-mail ou senha inválidos' });
     }
 
-    if (!user.active) {
+    if (!user.active || user.archivedAt) {
       await recordAuditEvent({
         AuditLogModel: require('../models/Auditoria'),
         req,
@@ -58,8 +63,14 @@ router.post('/login', loginLimiter, async (req, res) => {
       details: { email: user.email },
     });
 
+    const session = await createAuthSession(user._id);
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      {
+        id: user._id,
+        role: user.role,
+        sessionId: session._id,
+        authVersion: user.authVersion ?? 0,
+      },
       process.env.JWT_SECRET || 'restaurante-pdv-secret-key',
       { expiresIn: '7d' }
     );
@@ -76,6 +87,11 @@ router.post('/login', loginLimiter, async (req, res) => {
 
 router.post('/logout', auth, async (req, res) => {
   try {
+    if (req.authSessionId) {
+      await revokeAuthSession(req.authSessionId, req.user._id);
+    } else {
+      await invalidateUserSessions(req.user._id);
+    }
     await recordAuditEvent({
       AuditLogModel: require('../models/Auditoria'),
       req,
@@ -160,23 +176,25 @@ router.patch('/users/:id/active', auth.adminOnly, async (req, res) => {
 
     const wasActive = user.active;
     user.active = active;
+    if (wasActive && !active) {
+      user.authVersion = (user.authVersion ?? 0) + 1;
+    }
     await user.save();
 
-    try {
-      await recordAuditEvent({
-        AuditLogModel: require('../models/Auditoria'),
-        req,
-        action: 'usuario.status_alterado',
-        details: { usuarioId: String(user._id), ativo: { antes: wasActive, depois: user.active } },
-      });
-    } catch (auditError) {
-      console.error(auditError);
+    if (wasActive && !active) {
+      await revokeUserSessions(user._id);
     }
+    await recordAuditEvent({
+      AuditLogModel: require('../models/Auditoria'),
+      req,
+      action: 'usuario.status_alterado',
+      details: { usuarioId: String(user._id), ativo: { antes: wasActive, depois: user.active } },
+    });
 
     res.json({ id: user._id, name: user.name, username: user.username || '', email: user.email, role: user.role, active: user.active });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Não foi possível alterar o status do usuário' });
+    res.status(500).json({ message: 'O status foi alterado, mas não foi possível concluir a invalidação ou auditoria' });
   }
 });
 
@@ -251,23 +269,25 @@ router.patch('/users/:id', auth.adminOnly, async (req, res) => {
       return res.json({ id: user._id, name: user.name, username: user.username || '', email: user.email, role: user.role, active: user.active });
     }
 
-    await user.save();
-
-    try {
-      await recordAuditEvent({
-        AuditLogModel: require('../models/Auditoria'),
-        req,
-        action: 'usuario.alterado',
-        details: { usuarioId: String(user._id), alteracoes: changes },
-      });
-    } catch (auditError) {
-      console.error(auditError);
+    if (changes.perfil || changes.senha) {
+      user.authVersion = (user.authVersion ?? 0) + 1;
     }
+    await user.save();
+    if (changes.perfil || changes.senha) {
+      await revokeUserSessions(user._id);
+    }
+
+    await recordAuditEvent({
+      AuditLogModel: require('../models/Auditoria'),
+      req,
+      action: 'usuario.alterado',
+      details: { usuarioId: String(user._id), alteracoes: changes },
+    });
 
     res.json({ id: user._id, name: user.name, username: user.username || '', email: user.email, role: user.role, active: user.active });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Não foi possível alterar o usuário' });
+    res.status(500).json({ message: 'A alteração foi aplicada ou iniciada, mas não foi possível concluir a invalidação ou auditoria' });
   }
 });
 
@@ -283,23 +303,21 @@ router.delete('/users/:id', auth.adminOnly, async (req, res) => {
 
     user.active = false;
     user.archivedAt = new Date();
+    user.authVersion = (user.authVersion ?? 0) + 1;
     await user.save();
+    await revokeUserSessions(user._id);
 
-    try {
-      await recordAuditEvent({
-        AuditLogModel: require('../models/Auditoria'),
-        req,
-        action: 'usuario.arquivado',
-        details: { usuarioId: String(user._id), email: user.email, perfil: user.role },
-      });
-    } catch (auditError) {
-      console.error(auditError);
-    }
+    await recordAuditEvent({
+      AuditLogModel: require('../models/Auditoria'),
+      req,
+      action: 'usuario.arquivado',
+      details: { usuarioId: String(user._id), email: user.email, perfil: user.role },
+    });
 
     res.json({ message: 'Usuário arquivado com sucesso', id: user._id });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Não foi possível excluir o usuário' });
+    res.status(500).json({ message: 'O usuário foi arquivado, mas não foi possível concluir a invalidação ou auditoria' });
   }
 });
 

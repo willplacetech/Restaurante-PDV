@@ -31,6 +31,10 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  authVersion: {
+    type: Number,
+    default: 0,
+  },
   archivedAt: {
     type: Date,
     default: null,

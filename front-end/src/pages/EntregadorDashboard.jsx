@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useContext } from 'react';
+import { useState, useEffect, useMemo, useCallback, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
-import { SearchableSelect } from '../components/SearchableSelect.jsx';
 import api from '../services/api.jsx';
 
 const STATUS_NOMES = {
@@ -14,46 +12,55 @@ const STATUS_NOMES = {
   entregue: 'Entregue',
   cancelado: 'Cancelado',
 };
+const PROXIMO_STATUS = {
+  despachado: { status: 'a_caminho', label: 'Iniciar entrega' },
+  a_caminho: { status: 'entregue', label: 'Marcar como entregue' },
+};
+const formatarMoeda = (valor) => Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function EntregadorDashboard() {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [pedidos, setPedidos] = useState([]);
   const [statusFiltro, setStatusFiltro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
-  const erroRef = useRef(null);
+  const [erro, setErro] = useState('');
+  const [agora, setAgora] = useState(Date.now);
 
   useEffect(() => {
-    if (!user) return navigate('/login');
-  }, [user]);
+    if (!user) navigate('/login');
+  }, [user, navigate]);
 
-  const carregarPedidos = async () => {
+  const carregarPedidos = useCallback(async () => {
     setCarregando(true);
     try {
-      const { data } = await api.get('/entregas/pedidos', {
+      const { data } = await api.get('/delivery/pedidos', {
         pdvSilenciosa: true,
         params: { status: statusFiltro || undefined },
       });
-      setPedidos(data.pedidos || data.data || []);
+      setPedidos(Array.isArray(data) ? data : data.pedidos || data.data || []);
+      setAgora(Date.now());
+      setErro('');
     } catch (err) {
-      setErro('Erro ao carregar pedidos');
       console.error(err);
+      setErro(err.response?.data?.msg || 'Erro ao carregar pedidos.');
     } finally {
       setCarregando(false);
     }
-  };
+  }, [statusFiltro]);
 
   const atualizarStatus = async (pedidoId, novoStatus) => {
     setAtualizando(true);
     try {
-      await api.post(`/entregas/pedidos/${pedidoId}/pronto`, {});
-      setPedidos(pedidos.map((p) => (p._id === pedidoId ? { ...p, status: novoStatus } : p)));
-      const toastKey = novoStatus === 'pronto' ? 'status' : 'sucesso';
-      setToast(toastKey, `Pedido marcado como ${novoStatus}.`);
+      await api.post(`/delivery/pedidos/${pedidoId}/status`, { novoStatus });
+      setPedidos((atuais) => atuais.map((p) => (p._id === pedidoId ? { ...p, status: novoStatus } : p)));
+      setErro('');
+      showToast(`Pedido marcado como ${STATUS_NOMES[novoStatus] || novoStatus}.`, 'success');
     } catch (err) {
       console.error(err);
-      setErro('Erro ao atualizar status');
+      setErro(err.response?.data?.msg || 'Erro ao atualizar status.');
     } finally {
       setAtualizando(false);
     }
@@ -64,14 +71,26 @@ export default function EntregadorDashboard() {
     return pedido.status === statusFiltro;
   };
 
+  useEffect(() => {
+    if (!user || user.role !== 'entregador') return undefined;
+
+    const carregamentoInicial = setTimeout(() => void carregarPedidos(), 0);
+    const intervalo = setInterval(() => void carregarPedidos(), 10000);
+    return () => {
+      clearTimeout(carregamentoInicial);
+      clearInterval(intervalo);
+    };
+  }, [carregarPedidos, user]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { pendente: 0, pronto: 0, despachado: 0, a_caminho: 0, entregue: 0, cancelado: 0 };
+    pedidos.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
+    return counts;
+  }, [pedidos]);
+
   if (!user || user.role !== 'entregador') {
     return null;
   }
-
-  useEffect(() => {
-    const intervalo = setInterval(carregarPedidos, 10000);
-    return () => clearInterval(intervalo);
-  }, [carregarPedidos]);
 
   return (
     <div className="delivery-app delivery-board">
@@ -84,16 +103,9 @@ export default function EntregadorDashboard() {
         <span className="delivery-muted" role="status">Atualização automática a cada 10 segundos</span>
       </header>
 
-      <section className="delivery-stats" aria-label="Resumo das entregas">
-        const statusCounts = useMemo(
-          () => {
-            const counts = { pendente: 0, pronto: 0, despachado: 0, a_caminho: 0, entregue: 0, cancelado: 0 };
-            pedidos.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
-            return counts;
-          },
-          [pedidos]
-        );
+      {erro && <p className="delivery-error" role="alert">{erro}</p>}
 
+      <section className="delivery-stats" aria-label="Resumo das entregas">
         <div className="delivery-card delivery-stat" key="pendente">
           <span>Pendentes</span><strong>{statusCounts.pendente}</strong>
         </div>
@@ -118,11 +130,14 @@ export default function EntregadorDashboard() {
             {pedidos
               .filter(filtrarPorStatus)
               .map((pedido) => {
-                const minutos = Math.floor(
-                  (new Date().getTime() - new Date(pedido.criadoEm).getTime()) / 60000
-                );
-                const isPronto = pedido.status === 'pronto';
-                const podeAtualizar = !['entregue', 'cancelado'].includes(pedido.status);
+                const criadoEm = new Date(pedido.criadoEm).getTime();
+                const minutos = Number.isFinite(criadoEm)
+                  ? Math.max(0, Math.floor((agora - criadoEm) / 60000))
+                  : 0;
+                const horarioPedido = Number.isFinite(criadoEm)
+                  ? new Date(criadoEm).toLocaleString('pt-BR')
+                  : 'Horário não informado';
+                const proximoStatus = PROXIMO_STATUS[pedido.status];
 
                 return (
                   <article
@@ -131,35 +146,23 @@ export default function EntregadorDashboard() {
                   >
                     <span className="delivery-badge">{STATUS_NOMES[pedido.status]}</span>
                     <p className="delivery-muted">
-                      Ha {minutos} min {new Date(pedido.criadoEm).toLocaleString('pt-BR')}
+                      Há {minutos} min {horarioPedido}
                     </p>
-                    <h3>{pedido.origem.nomeCliente}</h3>
+                    <h3>{pedido.origem?.nomeCliente || 'Cliente'}</h3>
                     <p className="delivery-muted">
-                      {pedido.origem.endereco.rua}, {pedido.origem.endereco.numero}
-                      {pedido.origem.endereco.bairro}
-                      {pedido.origem.endereco.complemento && ` ${pedido.origem.endereco.complemento}`}
+                      {[pedido.origem?.endereco?.rua, pedido.origem?.endereco?.numero, pedido.origem?.endereco?.bairro, pedido.origem?.endereco?.complemento].filter(Boolean).join(', ') || 'Endereço não informado'}
                     </p>
                     <p>
-                      <strong>{pedido.valorTotal} + {pedido.taxaEntrega} de entrega</strong>
+                      <strong>{formatarMoeda(pedido.valorTotal)} + {formatarMoeda(pedido.taxaEntrega)} de entrega</strong>
                     </p>
                     {pedido.entregadorId && (
                       <p className="delivery-muted">Entregador: {pedido.entregadorId.nome}</p>
                     )}
 
-                    {podeAtualizar && (
-                      <>
-                        {isPronto && (
-                          <button disabled={atualizando} onClick={() => atualizarStatus(pedido._id, 'despachado')}>
-                            Despachar
-                          </button>
-                        )}
-
-                        {!isPronto && (
-                          <button disabled={atualizando} onClick={() => atualizarStatus(pedido._id, 'pronto')}>
-                            Marcar como pronto
-                          </button>
-                        )}
-                      </>
+                    {proximoStatus && (
+                      <button disabled={atualizando} onClick={() => atualizarStatus(pedido._id, proximoStatus.status)}>
+                        {proximoStatus.label}
+                      </button>
                     )}
 
                     <a

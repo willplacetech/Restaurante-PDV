@@ -1,15 +1,7 @@
-import FieldLabel from '../components/FieldLabel.jsx';
-import SearchableSelect from '../components/SearchableSelect.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api.jsx';
-import Paginacao from '../components/Paginacao.jsx';
-import useUrlPagination from '../hooks/useUrlPagination.js';
-import { updatePaginationParams } from '../utils/paginationUrl.js';
-import ConfirmarAcao from '../components/ConfirmarAcao.jsx';
-import EstadoLista from '../components/EstadoLista.jsx';
-import { useToast } from '../components/useToast.js';
-import { imprimirEntrega } from '../utils/imprimirEntrega.js';
+import { useToast } from '../components/Toast.jsx';
 import '../styles/delivery.css';
 
 const STATUS_NOMES = {
@@ -23,6 +15,43 @@ const STATUS_NOMES = {
 const moeda = valor => Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const enderecoTexto = endereco => [endereco?.rua, endereco?.numero, endereco?.bairro, endereco?.complemento].filter(Boolean).join(', ');
 const idadeMinutos = (data, referencia = Date.now()) => Math.max(0, Math.floor((referencia - new Date(data).getTime()) / 60000));
+const dataLocal = data => {
+  const dataValida = new Date(data);
+  if (Number.isNaN(dataValida.getTime())) return '';
+  return `${dataValida.getFullYear()}-${String(dataValida.getMonth() + 1).padStart(2, '0')}-${String(dataValida.getDate()).padStart(2, '0')}`;
+};
+const escaparHtml = valor => String(valor ?? '').replace(/[&<>"']/g, caractere => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+})[caractere]);
+
+function imprimirEntrega(pedido) {
+  const janela = window.open('', '_blank', 'width=420,height=640');
+  if (!janela) return false;
+  const endereco = pedido.origem?.endereco || {};
+  const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+  const linhasItens = itens.map(item => `
+    <div class="linha">
+      <span>${escaparHtml(item.quantidade)} × ${escaparHtml(item.nome)}</span>
+      <span>${moeda(Number(item.quantidade || 0) * Number(item.precoUnitario || 0))}</span>
+    </div>`).join('');
+  janela.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido de entrega</title><style>
+    *{box-sizing:border-box}body{width:76mm;margin:0;padding:4mm;color:#222;font:12px ui-monospace,monospace}
+    h1{font-size:16px;text-align:center}.linha{display:flex;justify-content:space-between;gap:8px;margin:6px 0}
+    hr{border:0;border-top:1px dashed #555;margin:10px 0}@media print{@page{size:80mm auto;margin:0}}
+  </style></head><body><h1>Pedido de entrega</h1><div class="linha"><span>Pedido</span><span>${escaparHtml(pedido._id)}</span></div>
+  <div>${escaparHtml(pedido.origem?.nomeCliente)}</div><div>${escaparHtml(pedido.origem?.telefone)}</div>
+  <div>${escaparHtml(enderecoTexto(endereco))}</div><hr>${linhasItens}<hr>
+  <div class="linha"><span>Produtos</span><span>${moeda(pedido.valorTotal)}</span></div>
+  <div class="linha"><span>Entrega</span><span>${moeda(pedido.taxaEntrega)}</span></div>
+  <div class="linha"><strong>Total</strong><strong>${moeda(Number(pedido.valorTotal || 0) + Number(pedido.taxaEntrega || 0))}</strong></div>
+  <script>window.onload=()=>window.print()</script></body></html>`);
+  janela.document.close();
+  return true;
+}
 
 function minutosNoStatus(pedido, status, agora) {
   const evento = [...(pedido.statusHistorico || [])].reverse().find(item => item.status === status);
@@ -54,7 +83,7 @@ function FormularioPedidoManual({ onSubmit, ocupado, taxaPadrao }) {
       <label>Taxa de entrega (R$)<input name="taxaEntrega" type="number" step="0.01" min="0" defaultValue={taxaPadrao} required /></label>
     </div>
     <details>
-      <summary>Itens do pedido (opcional)</summary>
+      <summary>Itens do pedido</summary>
       {itens.map((item, indice) => <div className="delivery-form-grid" key={indice}>
         <label>Descrição<input name="descricao" value={item.descricao} onChange={event => alterarItem(indice, 'descricao', event.target.value)} required /></label>
         <label>Quantidade<input name="quantidade" type="number" min="0.001" step="0.001" value={item.quantidade} onChange={event => alterarItem(indice, 'quantidade', event.target.value)} required /></label>
@@ -68,12 +97,12 @@ function FormularioPedidoManual({ onSubmit, ocupado, taxaPadrao }) {
 }
 
 export default function Entregas() {
-  const navigate = useNavigate();
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const pedidoDestacado = searchParams.get('pedido');
   const [pedidos, setPedidos] = useState([]);
   const [entregadores, setEntregadores] = useState([]);
+  const [usuariosEntregadores, setUsuariosEntregadores] = useState([]);
   const [estatisticas, setEstatisticas] = useState({});
   const [comercio, setComercio] = useState(null);
   const [selecao, setSelecao] = useState({});
@@ -87,37 +116,72 @@ export default function Entregas() {
   const [erro, setErro] = useState('');
   const [erroLista, setErroLista] = useState('');
   const [aviso, setAviso] = useState('');
-  const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [agora, setAgora] = useState(Date.now);
   const [ocupado, setOcupado] = useState(false);
   const [despachando, setDespachando] = useState('');
   const carregamentoRequestId = useRef(0);
   const pedidoFocado = useRef(null);
-  const paginacaoHistorico = useUrlPagination();
-  const { paginaAtual, limiteAtual } = paginacaoHistorico;
+  const paginaAtual = Math.max(1, Number(searchParams.get('pagina') || 1));
+  const limiteAtual = Math.max(1, Number(searchParams.get('limite') || 25));
+  const alterarPagina = useCallback((pagina) => {
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.set('pagina', String(Math.max(1, pagina)));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const alterarLimite = useCallback((limite) => {
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.set('pagina', '1');
+      next.set('limite', String(limite));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const carregar = useCallback(async (silencioso = false) => {
     const requestId = ++carregamentoRequestId.current;
     if (!silencioso) setCarregando(true);
     try {
-      const query = new URLSearchParams({ pagina: String(aba === 'historico' ? paginaAtual : 1), limite: String(aba === 'historico' ? limiteAtual : 100) });
-      if (aba === 'historico') {
-        if (filtroStatus) query.set('status', filtroStatus);
-        if (filtroData) query.set('data', filtroData);
-      }
-      const [pedidosResponse, entregadoresResponse, estatisticasResponse, comercioResponse] = await Promise.all([
-        api.get(`/entregas/pedidos?${query}`, { pdvSilenciosa: silencioso }),
-        api.get('/entregas/entregadores', { pdvSilenciosa: silencioso }),
-        api.get('/entregas/estatisticas', { pdvSilenciosa: silencioso }),
-        api.get('/entregas/configuracao', { pdvSilenciosa: silencioso }),
+      const [pedidosResponse, entregadoresResponse, usuariosResponse, comercioResponse] = await Promise.all([
+        api.get('/delivery/pedidos', { pdvSilenciosa: silencioso }),
+        api.get('/delivery/entregadores', { pdvSilenciosa: silencioso }),
+        api.get('/delivery/entregadores/usuarios-disponiveis', { pdvSilenciosa: silencioso }),
+        api.get('/delivery/configuracao', { pdvSilenciosa: silencioso }),
       ]);
       if (requestId !== carregamentoRequestId.current) return;
-      setPedidos(pedidosResponse.data.pedidos || []);
-      setTotalPedidos(pedidosResponse.data.total || 0);
+      const todosPedidos = Array.isArray(pedidosResponse.data)
+        ? pedidosResponse.data
+        : pedidosResponse.data.pedidos || [];
+      const pedidosHistorico = todosPedidos
+        .filter(pedido => !filtroStatus || pedido.status === filtroStatus)
+        .filter(pedido => !filtroData || dataLocal(pedido.criadoEm) === filtroData)
+        .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+      const totalHistorico = pedidosHistorico.length;
+      const ultimaPagina = Math.max(1, Math.ceil(totalHistorico / limiteAtual));
+      const paginaHistorico = Math.min(paginaAtual, ultimaPagina);
+      setPedidos(aba === 'historico'
+        ? pedidosHistorico.slice((paginaHistorico - 1) * limiteAtual, paginaHistorico * limiteAtual)
+        : [...todosPedidos].sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()));
+      setTotalPedidos(aba === 'historico' ? totalHistorico : todosPedidos.length);
       setEntregadores(entregadoresResponse.data || []);
-      setEstatisticas(estatisticasResponse.data || {});
+      setUsuariosEntregadores(usuariosResponse.data || []);
       setComercio(comercioResponse.data || null);
+      const hoje = dataLocal(Date.now());
+      const pedidosHoje = todosPedidos.filter(pedido => dataLocal(pedido.criadoEm) === hoje);
+      const entreguesHoje = pedidosHoje.filter(pedido => pedido.status === 'entregue');
+      const duracoes = entreguesHoje.map(pedido => {
+        const conclusao = [...(pedido.statusHistorico || [])].reverse().find(item => item.status === 'entregue')?.data || pedido.atualizadoEm;
+        return idadeMinutos(pedido.criadoEm, new Date(conclusao).getTime());
+      }).filter(Number.isFinite);
+      setEstatisticas({
+        pendentes: todosPedidos.filter(pedido => pedido.status === 'pendente').length,
+        prontos: todosPedidos.filter(pedido => pedido.status === 'pronto').length,
+        emEntrega: todosPedidos.filter(pedido => ['despachado', 'a_caminho'].includes(pedido.status)).length,
+        entregues: entreguesHoje.length,
+        tempoMedioMin: duracoes.length ? Math.round(duracoes.reduce((total, minutos) => total + minutos, 0) / duracoes.length) : 0,
+      });
       setAgora(Date.now());
       setErroLista('');
     } catch (error) {
@@ -143,7 +207,8 @@ export default function Entregas() {
   const atualizarFiltroHistorico = (nome, valor, atualizarEstado) => {
     atualizarEstado(valor);
     setSearchParams((current) => {
-      const next = updatePaginationParams(current, { pagina: 1 });
+      const next = new URLSearchParams(current);
+      next.set('pagina', '1');
       if (!valor) next.delete(nome);
       else next.set(nome, valor);
       return next;
@@ -173,6 +238,7 @@ export default function Entregas() {
   const emEntrega = useMemo(() => pedidos.filter(pedido => ['despachado', 'a_caminho'].includes(pedido.status)), [pedidos]);
   const aguardandoPreparo = useMemo(() => pedidos.filter(pedido => pedido.status === 'pendente'), [pedidos]);
   const pedidosDaFila = filaAba === 'prontos' ? prontos : filaAba === 'em-entrega' ? emEntrega : aguardandoPreparo;
+  const pedidosVisiveis = aba === 'fila' ? pedidosDaFila : pedidos;
 
   const executar = async (acao, sucesso) => {
     if (ocupado) return false;
@@ -200,11 +266,17 @@ export default function Entregas() {
 
   const criarPedidoManual = async (event, itens) => {
     event.preventDefault();
+    if (!itens.length) {
+      const mensagem = 'Adicione ao menos um item ao pedido.';
+      setErro(mensagem);
+      showToast(mensagem, 'error');
+      return;
+    }
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const endereco = Object.fromEntries(['rua', 'numero', 'complemento', 'bairro', 'referencia'].map(campo => [campo, form.get(campo) || '']));
     const criado = await executar(
-      () => api.post('/entregas/pedidos', {
+      () => api.post('/delivery/pedidos', {
         origem: { nomeCliente: form.get('nomeCliente'), telefone: form.get('telefone'), endereco },
         valorTotal: Number(form.get('valorTotal')),
         taxaEntrega: Number(form.get('taxaEntrega')),
@@ -227,7 +299,7 @@ export default function Entregas() {
     }
     setDespachando(pedido._id);
     await executar(async () => {
-      const { data } = await api.post(`/entregas/pedidos/${pedido._id}/despachar`, { entregadorId });
+      const { data } = await api.post(`/delivery/pedidos/${pedido._id}/despachar`, { entregadorId });
       setWhatsapp(data.whatsapp || null);
       setSelecao(atual => {
         const proxima = { ...atual };
@@ -239,18 +311,25 @@ export default function Entregas() {
 
   const enviarWhatsApp = async pedido => {
     await executar(async () => {
-      const { data } = await api.post(`/entregas/pedidos/${pedido._id}/enviar-whatsapp`, {});
-      setWhatsapp(data);
+      const { data } = await api.post(`/delivery/pedidos/${pedido._id}/enviar-whatsapp`, {});
+      setWhatsapp({ ...data, mensagemPronta: data.mensagem, enviado: false });
     }, 'Mensagem de rastreamento pronta para compartilhar.');
   };
 
   const cancelar = (pedido, motivo) => executar(
-    () => api.post(`/entregas/pedidos/${pedido._id}/cancelar`, { motivo }),
+    () => api.post(`/delivery/pedidos/${pedido._id}/cancelar`, { motivo }),
     'Pedido cancelado.'
   );
 
   const marcarPronto = pedido => {
-    void executar(() => api.post(`/entregas/pedidos/${pedido._id}/pronto`, {}), 'Pedido marcado como pronto.');
+    void executar(() => api.post(`/delivery/pedidos/${pedido._id}/pronto`, {}), 'Pedido marcado como pronto.');
+  };
+
+  const marcarEntregue = pedido => {
+    void executar(
+      () => api.post(`/delivery/pedidos/${pedido._id}/status`, { novoStatus: 'entregue' }),
+      'Pedido marcado como entregue.'
+    );
   };
 
   const salvarEntregador = event => {
@@ -261,6 +340,7 @@ export default function Entregas() {
       nome: form.get('nome'),
       telefone: form.get('telefone'),
       ativo: form.get('ativo') === 'on',
+      usuarioId: form.get('usuarioId'),
     };
     if (form.get('senha')) body.senha = form.get('senha');
     const mensagemSucesso = entregadorEdicao
@@ -268,10 +348,10 @@ export default function Entregas() {
       : 'Entregador cadastrado. Compartilhe a senha temporária com ele.';
     void executar(async () => {
       if (entregadorEdicao) {
-        await api.put(`/entregas/entregadores/${entregadorEdicao._id}`, body);
+        await api.put(`/delivery/entregadores/${entregadorEdicao._id}`, body);
       } else {
         body.senha = form.get('senha');
-        await api.post('/entregas/entregadores', body);
+        await api.post('/delivery/entregadores', body);
       }
       setEntregadorEdicao(null);
       formElement.reset();
@@ -279,17 +359,14 @@ export default function Entregas() {
   };
 
   const excluirEntregador = entregador => {
-    void executar(() => api.delete(`/entregas/entregadores/${entregador._id}`), 'Entregador excluído.');
+    void executar(() => api.delete(`/delivery/entregadores/${entregador._id}`), 'Entregador desativado.');
   };
 
   const salvarConfiguracao = event => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void executar(
-      () => api.put('/entregas/configuracao', {
-        nome: form.get('nome'),
-        telefone: form.get('telefone'),
-        endereco: form.get('endereco'),
+      () => api.patch('/delivery/configuracao', {
         taxaEntregaPadrao: Number(form.get('taxaEntregaPadrao')),
         tempoEstimadoPadraoMin: Number(form.get('tempo')),
         mensagemWhatsApp: form.get('mensagem'),
@@ -321,6 +398,7 @@ export default function Entregas() {
     </section>
 
     {erro && <p role="alert" className="delivery-error">{erro}</p>}
+    {erroLista && <div role="alert" className="delivery-error"><span>{erroLista}</span><button type="button" onClick={() => void carregar()}>Tentar novamente</button></div>}
     {aviso && <p role="status" className="delivery-success">{aviso}</p>}
 
     {whatsapp && <section className="delivery-card" aria-label="Mensagem de rastreamento">
@@ -336,7 +414,7 @@ export default function Entregas() {
 
     <nav className="delivery-tabs" aria-label="Gestão de entregas">
       {[['fila', 'Fila de entregas'], ['novo', 'Novo pedido'], ['historico', 'Histórico'], ['entregadores', 'Entregadores'], ['configuracao', 'Configurações']].map(([id, label]) =>
-        <button key={id} type="button" aria-selected={aba === id} onClick={() => { setAba(id); paginacaoHistorico.alterarPagina(1); }}>{label}</button>
+        <button key={id} type="button" aria-selected={aba === id} onClick={() => { setAba(id); alterarPagina(1); }}>{label}</button>
       )}
     </nav>
 
@@ -348,11 +426,57 @@ export default function Entregas() {
       <button type="button" aria-selected={filaAba === 'preparo'} onClick={() => setFilaAba('preparo')}>Aguardando preparo ({aguardandoPreparo.length})</button>
     </nav>}
 
+    {['fila', 'historico'].includes(aba) && <section className="delivery-grid" aria-label={aba === 'historico' ? 'Histórico de pedidos' : 'Pedidos de entrega'}>
+      {carregando ? <p className="delivery-card" role="status">Carregando pedidos...</p> : pedidosVisiveis.length === 0 ? (
+        <p className="delivery-card delivery-empty">{aba === 'historico' ? 'Nenhum pedido encontrado para este filtro.' : 'Nenhum pedido nesta fila.'}</p>
+      ) : pedidosVisiveis.map(pedido => {
+        const minutos = minutosNoStatus(pedido, pedido.status, agora) ?? idadeMinutos(pedido.criadoEm, agora);
+        const endereco = pedido.origem?.endereco || {};
+        return <article
+          className={`delivery-card delivery-order ${faixaAtraso(minutos)}`}
+          id={`pedido-${pedido._id}`}
+          key={pedido._id}
+        >
+          <span className="delivery-badge">{STATUS_NOMES[pedido.status] || pedido.status}</span>
+          <p className="delivery-muted">Há {minutos} min · {new Date(pedido.criadoEm).toLocaleString('pt-BR')}</p>
+          <h2>{pedido.origem?.nomeCliente || 'Cliente'}</h2>
+          <p>{enderecoTexto(endereco) || 'Endereço não informado'}</p>
+          {endereco.referencia && <p className="delivery-muted">Referência: {endereco.referencia}</p>}
+          <p><strong>{moeda(pedido.valorTotal)}</strong> + {moeda(pedido.taxaEntrega)} de entrega</p>
+          {pedido.entregadorId?.nome && <p className="delivery-muted">Entregador: {pedido.entregadorId.nome}</p>}
+          <div className="delivery-actions">
+            {pedido.status === 'pendente' && <button type="button" disabled={ocupado} onClick={() => marcarPronto(pedido)}>Marcar como pronto</button>}
+            {pedido.status === 'pronto' && <>
+              <label>Entregador
+                <select value={selecao[pedido._id] || ''} onChange={event => setSelecao(atual => ({ ...atual, [pedido._id]: event.target.value }))}>
+                  <option value="">Selecione um entregador</option>
+                  {entregadores.filter(entregador => entregador.ativo !== false).map(entregador => <option key={entregador._id} value={entregador._id}>{entregador.nome}</option>)}
+                </select>
+              </label>
+              <button type="button" disabled={ocupado || !selecao[pedido._id]} onClick={() => void despachar(pedido)}>
+                {despachando === pedido._id ? 'Despachando...' : 'Despachar'}
+              </button>
+            </>}
+            {['despachado', 'a_caminho'].includes(pedido.status) && <button type="button" disabled={ocupado} onClick={() => marcarEntregue(pedido)}>Marcar como entregue</button>}
+            {pedido.status !== 'cancelado' && pedido.status !== 'entregue' && <button type="button" className="delivery-danger" disabled={ocupado} onClick={() => {
+              const motivo = window.prompt('Qual o motivo do cancelamento?');
+              if (motivo?.trim()) void cancelar(pedido, motivo.trim());
+            }}>Cancelar</button>}
+            <button type="button" className="delivery-secondary" disabled={ocupado} onClick={() => void enviarWhatsApp(pedido)}>Compartilhar rastreio</button>
+            <button type="button" className="delivery-secondary" onClick={() => {
+              if (!imprimirEntrega(pedido)) setErro('Permita janelas pop-up para imprimir o pedido.');
+            }}>Imprimir</button>
+          </div>
+          <a href={`/pedido/${pedido.tokenRastreamento}`} target="_blank" rel="noreferrer">Ver rastreio</a>
+        </article>;
+      })}
+    </section>}
+
     {aba === 'historico' && <div className="delivery-form-grid">
       <label>Status
-        <SearchableSelect value={filtroStatus} onChange={event => atualizarFiltroHistorico('status', event.target.value, setFiltroStatus)}>
+        <select value={filtroStatus} onChange={event => atualizarFiltroHistorico('status', event.target.value, setFiltroStatus)}>
           <option value="">Todos</option>{Object.entries(STATUS_NOMES).map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
-        </SearchableSelect>
+        </select>
       </label>
       <label>Data<input type="date" value={filtroData} onChange={event => atualizarFiltroHistorico('data', event.target.value, setFiltroData)} /></label>
     </div>}
@@ -360,20 +484,38 @@ export default function Entregas() {
     {aba === 'entregadores' && <section className="delivery-grid">
       <form className="delivery-card" onSubmit={salvarEntregador} key={entregadorEdicao?._id || 'novo-entregador'}>
         <h2>{entregadorEdicao ? 'Editar entregador' : 'Cadastrar entregador'}</h2>
+        <label>Conta de usuário
+          <select name="usuarioId" required={!entregadorEdicao?.usuarioId} defaultValue={entregadorEdicao?.usuarioId?._id || ''}>
+            <option value="">Selecione uma conta ativa de entregador</option>
+            {entregadorEdicao?.usuarioId && !usuariosEntregadores.some(usuario => usuario._id === entregadorEdicao.usuarioId._id) && (
+              <option value={entregadorEdicao.usuarioId._id}>
+                {entregadorEdicao.usuarioId.name || entregadorEdicao.usuarioId.username} (vínculo atual)
+              </option>
+            )}
+            {usuariosEntregadores.map(usuario => <option key={usuario._id} value={usuario._id}>
+              {usuario.name || usuario.username}{usuario.email ? ` · ${usuario.email}` : ''}
+            </option>)}
+          </select>
+        </label>
         <label>Nome<input name="nome" required maxLength={160} defaultValue={entregadorEdicao?.nome || ''} /></label>
         <label>Telefone<input name="telefone" type="tel" required maxLength={30} defaultValue={entregadorEdicao?.telefone || ''} /></label>
         <label>Senha temporária<input name="senha" type="password" autoComplete="new-password" required={!entregadorEdicao} minLength={8} /></label>
         <label><span>Ativo</span><input name="ativo" type="checkbox" defaultChecked={entregadorEdicao?.ativo !== false} /></label>
-        <div className="delivery-actions"><button disabled={ocupado}>{entregadorEdicao ? 'Salvar alterações' : 'Cadastrar entregador'}</button>{entregadorEdicao && <button type="button" className="delivery-secondary" onClick={() => setEntregadorEdicao(null)}>Cancelar edição</button></div>
+        <div className="delivery-actions"><button disabled={ocupado}>{entregadorEdicao ? 'Salvar alterações' : 'Cadastrar entregador'}</button>{entregadorEdicao && <button type="button" className="delivery-secondary" onClick={() => setEntregadorEdicao(null)}>Cancelar edição</button>}</div>
       </form>
       <div>
         <div className="delivery-grid">
         {entregadores.map(entregador => {
-          const pertenceAoComercio = String(entregador.tenantId) === String(comercio?._id);
           return <article className="delivery-card" key={entregador._id}>
-          <span className="delivery-badge">{!pertenceAoComercio ? 'Livre · compartilhado' : entregador.ativo === false ? 'Desativado' : entregador.status}</span>
+          <span className="delivery-badge">{entregador.ativo === false ? 'Desativado' : entregador.status || 'Disponível'}</span>
           <h2>{entregador.nome}</h2><p><a href={`tel:${entregador.telefone}`}>{entregador.telefone}</a></p>
-          {pertenceAoComercio && <div className="delivery-actions"><button type="button" className="delivery-secondary" onClick={() => setEntregadorEdicao(entregador)}>Editar</button><ConfirmarAcao titulo="Excluir entregador" mensagem={`Excluir ${entregador.nome}? Se houver pedidos associados, o cadastro deverá ser desativado.`} acaoTexto="Excluir entregador" onConfirmar={() => excluirEntregador(entregador)}>{({ onClick }) => <button type="button" className="delivery-danger" disabled={ocupado} onClick={onClick}>Excluir</button>}</ConfirmarAcao></div>}
+          {entregador.usuarioId && <p className="delivery-muted">Conta: {entregador.usuarioId.name || entregador.usuarioId.username}</p>}
+          <div className="delivery-actions">
+            <button type="button" className="delivery-secondary" onClick={() => setEntregadorEdicao(entregador)}>Editar</button>
+            {entregador.ativo !== false && <button type="button" className="delivery-danger" disabled={ocupado} onClick={() => {
+              if (window.confirm(`Desativar o entregador ${entregador.nome}?`)) excluirEntregador(entregador);
+            }}>Desativar</button>}
+          </div>
           </article>;
         })}
         {!entregadores.length && <p className="delivery-empty">Nenhum entregador cadastrado.</p>}
@@ -381,7 +523,30 @@ export default function Entregas() {
       </div>
     </section>}
 
-    {aba === 'historico' && <Paginacao total={totalPedidos} paginaAtual={paginaAtual} limiteAtual={limiteAtual} onChangePagina={paginacaoHistorico.alterarPagina} onChangeLimite={paginacaoHistorico.alterarLimite} />}
+    {aba === 'configuracao' && <form className="delivery-card delivery-form-grid" onSubmit={salvarConfiguracao}>
+      <h2>Configurações de entrega</h2>
+      <label>Taxa padrão de entrega (R$)
+        <input name="taxaEntregaPadrao" type="number" min="0" step="0.01" defaultValue={comercio?.taxaEntregaPadrao ?? 0} required />
+      </label>
+      <label>Tempo estimado padrão (minutos)
+        <input name="tempo" type="number" min="1" step="1" defaultValue={comercio?.tempoEstimadoPadraoMin ?? 30} required />
+      </label>
+      <label>Mensagem de WhatsApp
+        <textarea name="mensagem" maxLength={1000} defaultValue={comercio?.mensagemWhatsApp || ''} />
+      </label>
+      <div className="delivery-actions"><button type="submit" disabled={ocupado}>Salvar configurações</button></div>
+    </form>}
+
+    {aba === 'historico' && <div className="delivery-actions">
+      <button type="button" disabled={paginaAtual <= 1 || carregando} onClick={() => alterarPagina(paginaAtual - 1)}>Anterior</button>
+      <span>Página {paginaAtual} de {Math.max(1, Math.ceil(totalPedidos / limiteAtual))}</span>
+      <button type="button" disabled={paginaAtual >= Math.max(1, Math.ceil(totalPedidos / limiteAtual)) || carregando} onClick={() => alterarPagina(paginaAtual + 1)}>Próxima</button>
+      <label>Por página
+        <select value={limiteAtual} onChange={event => alterarLimite(Number(event.target.value))}>
+          {[10, 25, 50, 100].map(limite => <option key={limite} value={limite}>{limite}</option>)}
+        </select>
+      </label>
+    </div>}
 
   </div>;
 }

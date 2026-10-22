@@ -29,10 +29,10 @@ const ProductSchema = new mongoose.Schema({
   },
   tipoProduto: {
     type: String,
-    enum: ['revenda', 'coz', 'producao'],
-    default: 'revenda',
+    enum: ['revenda', 'coz', 'producao', 'preparacao'],
     index: true,
   },
+  modoOperacional: { type: String, enum: ['sob_demanda', 'lote'] },
   rendimentoPorReceita: {
     type: Number,
     min: [0.001, 'Rendimento por receita deve ser maior que zero'],
@@ -134,7 +134,6 @@ const ProductSchema = new mongoose.Schema({
   },
   aFazer: {
     type: Boolean,
-    default: false,
   },
   permitirVendaSemInsumo: {
     type: Boolean,
@@ -240,7 +239,6 @@ const ProductSchema = new mongoose.Schema({
   estoqueInsumosInicialData: { type: String },
   producaoPropria: {
     type: Boolean,
-    default: false,
   },
   controladoComoInsumo: {
     type: Boolean,

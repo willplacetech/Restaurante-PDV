@@ -281,14 +281,7 @@ const calcularCustoDaFichaTecnica = async (fichaTecnica) => {
 const reporInsumo = (produto, quantidade, unidade) => {
   const quantidadeBase = paraBase(quantidade, unidade);
   const conteudoEmbalagem = conteudoPorEmbalagemBase(produto);
-  const controle = unidadeControle(produto);
   if (quantidadeBase <= 0) throw new Error(`Quantidade inválida para o insumo ${produto.nome}`);
-  if (unidadesDiretas.includes(controle)) {
-    const acrescimo = quantidadeBase / (fatoresBase[controle] || 1);
-    produto.estoqueEmbalagens = embalagensFechadas(produto) + acrescimo;
-    produto.estoqueInsumos = produto.estoqueEmbalagens;
-    return;
-  }
   const totalDepois = estoqueTotalBase(produto) + quantidadeBase;
   const fechadas = conteudoEmbalagem > 0 ? Math.floor(totalDepois / conteudoEmbalagem) : totalDepois;
   produto.estoqueEmbalagens = fechadas;

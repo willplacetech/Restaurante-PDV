@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../services/api';
-import { useToast } from '../components/Toast';
-import { useAuth } from '../context/AuthContext';
-import Skeleton from '../components/Skeleton';
-import Layout from '../components/Layout';
+import api from '../../services/api.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
+import Skeleton from '../../components/Skeleton.jsx';
+import Layout from '../../components/Layout.jsx';
 
 const STATUS_PEDIDO = {
   pendente: 'Aguardando',
@@ -69,7 +69,7 @@ export default function Atendimento() {
   const removerItem = useCallback((index) => {
     const itensRestantes = itensComanda.filter((_, i) => i !== index);
     setItensComanda(itensRestantes);
-    setTotal(itensRestances.reduce((s, i) => s + i.preco, 0));
+    setTotal(itensRestantes.reduce((s, i) => s + i.preco, 0));
     showToast('Item removido', 'info');
   }, []);
 

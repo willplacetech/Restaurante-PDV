@@ -8,6 +8,7 @@ const { obterTaxasCartao, calcularPagamento } = require('../utils/taxasCartao');
 const { precoPorUnidade } = require('../utils/pesoProduto');
 const { normalizarEstoqueLegado, produtoControlaPeso, dadosMovimentoEstoque } = require('../utils/estoqueProduto');
 const { calcularPrecoComDesconto } = require('../utils/descontosQuantidade');
+const { descreverTipoPreparacao } = require('../utils/preparationMode');
 
 const router = express.Router();
 const permiteFracionar = (product) => !Number(product?.pesoPorUnidade) && (Boolean(product?.vendidoFracionado) || ['kg', 'L'].includes(product?.unidadeVenda));
@@ -41,6 +42,9 @@ async function buildOrderItems(rawItems, session) {
     const pesoVendidoKg = vendaPorPeso ? Number(item.pesoVendidoKg) : 0;
     const quantity = vendaPorPeso ? 1 : Number(item.quantidade);
     if (!product) throw new Error('Produto não encontrado');
+    const tipoOperacional = descreverTipoPreparacao(product);
+    if (tipoOperacional.preparacaoPendente) throw new Error(`Defina a categoria e o modo operacional de "${product.nome}" antes de vendê-lo`);
+    if (tipoOperacional.modoOperacional === 'sob_demanda') throw new Error(`"${product.nome}" deve ser vendido por uma comanda para consumir ingredientes e entrar na fila da cozinha`);
     if (vendaPorPeso && (!Number.isFinite(pesoVendidoKg) || pesoVendidoKg <= 0)) throw new Error('Informe o peso vendido');
     if (!permiteFracionar(product) && !Number.isInteger(quantity)) throw new Error(`O produto "${product.nome}" é vendido somente por unidade`);
     normalizarEstoqueLegado(product);
@@ -162,6 +166,9 @@ router.patch('/:id/adicionar-itens', auth, auth.allowRoles('admin'), async (req,
       const product = porId.get(String(item.produtoId));
       const quantidade = Number(item.quantidade);
       if (!product) throw new Error('Produto não encontrado');
+      const tipoOperacional = descreverTipoPreparacao(product);
+      if (tipoOperacional.preparacaoPendente) throw new Error(`Defina a categoria e o modo operacional de "${product.nome}" antes de vendê-lo`);
+      if (tipoOperacional.modoOperacional === 'sob_demanda') throw new Error(`"${product.nome}" deve ser vendido por uma comanda para consumir ingredientes e entrar na fila da cozinha`);
       if (!permiteFracionar(product) && !Number.isInteger(quantidade)) throw new Error(`O produto "${product.nome}" é vendido somente por unidade`);
       return { produtoId: product.id, codigo: product.codigo, nome: product.nome, precoUnitario: product.preco, quantidade, unidadeVenda: product.unidadeVenda };
     });

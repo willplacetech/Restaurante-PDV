@@ -9,6 +9,7 @@ const Despesa = require('../models/Despesa');
 const PaymentSettings = require('../models/PaymentSettings');
 const Purchase = require('../models/Purchase');
 const { calcularCustoUnitarioVenda } = require('../utils/estoqueInsumo');
+const { descreverTipoPreparacao, inferirModoOperacional } = require('../utils/preparationMode');
 
 const router = express.Router();
 const TIME_ZONE = 'America/Sao_Paulo';
@@ -118,7 +119,7 @@ router.get('/dre', async (req, res) => {
     const produtoIds = [...new Set(periodoVendas.flatMap((pedido) => (pedido.itens || []).map((item) => String(item.produtoId || ''))))]
       .filter((produtoId) => mongoose.isValidObjectId(produtoId));
     const produtos = await Product.find({ _id: { $in: produtoIds } })
-      .select('nome tipoProduto custoUnitario custoUnitarioBase precoCompra unidade unidadeCompra unidadeVenda rendimento rendimentoPorUnidadeCompra')
+      .select('nome tipoProduto modoOperacional aFazer producaoPropria custoUnitario custoUnitarioBase precoCompra unidade unidadeCompra unidadeVenda rendimento rendimentoPorUnidadeCompra')
       .lean();
     const produtoPorId = new Map(produtos.map((produto) => [String(produto._id), produto]));
 
@@ -133,7 +134,10 @@ router.get('/dre', async (req, res) => {
         const produtoId = String(item.produtoId || '');
         const quantidade = quantidadeNaUnidadeBase(item);
         const produto = produtoPorId.get(produtoId);
-        const custoUnitario = ['coz', 'producao'].includes(produto?.tipoProduto)
+        const classificacao = descreverTipoPreparacao(produto);
+        const custoUnitario = classificacao.preparacaoPendente
+          ? 0
+          : inferirModoOperacional(produto)
           ? Number(produto?.custoUnitario || produto?.custoUnitarioBase || 0)
           : calcularCustoUnitarioVenda(produto);
         if (custoUnitario > 0) {

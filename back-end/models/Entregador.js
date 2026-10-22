@@ -13,6 +13,12 @@ const EntregadorSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  usuarioId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    unique: true,
+    sparse: true,
+  },
   ativo: {
     type: Boolean,
     default: true,

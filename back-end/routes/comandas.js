@@ -3,12 +3,14 @@ const mongoose = require('mongoose');
 const Comanda = require('../models/Comanda');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
+const Recipe = require('../models/Recipe');
 const Customer = require('../models/Customer');
 const StockMovement = require('../models/StockMovement');
 const auth = require('../middleware/auth');
 const { obterTaxasCartao, calcularPagamento } = require('../utils/taxasCartao');
 const { precoPorUnidade } = require('../utils/pesoProduto');
 const { normalizarEstoqueLegado, produtoControlaPeso, dadosMovimentoEstoque } = require('../utils/estoqueProduto');
+const { descreverTipoPreparacao, inferirModoOperacional } = require('../utils/preparationMode');
 const { calcularPrecoComDesconto, calcularPrecoGrupo } = require('../utils/descontosQuantidade');
 const { consumirInsumo, reporInsumo } = require('../utils/estoqueInsumo');
 
@@ -69,7 +71,20 @@ async function recalcularPrecosComanda(comanda, session) {
 async function ajustarEstoque(itens, operacao, session) {
   const idsDosItens = itens.map((item) => item.produtoId);
   const produtosVenda = await Product.find({ _id: { $in: idsDosItens } }).session(session);
-  const idsDosIngredientes = produtosVenda.filter((produto) => (produto.tipoProduto || (produto.aFazer ? 'coz' : 'revenda')) === 'coz').flatMap((produto) => (produto.fichaTecnica || []).map((ingrediente) => ingrediente.produtoId));
+  const produtosSobDemanda = produtosVenda.filter((produto) => inferirModoOperacional(produto) === 'sob_demanda');
+  const receitas = produtosSobDemanda.length
+    ? await Recipe.find({ ativa: true, produtoId: { $in: produtosSobDemanda.map((produto) => produto._id) } }).session(session)
+    : [];
+  const receitasPorProduto = new Map(receitas.map((receita) => [String(receita.produtoId), receita]));
+  const idsDosIngredientes = produtosSobDemanda.flatMap((produto) => {
+    const fichasSalvas = itens
+      .filter((item) => String(item.produtoId) === String(produto._id) && item.insumosConsumidos?.length)
+      .map((item) => item.insumosConsumidos);
+    const ingredientes = fichasSalvas.length
+      ? fichasSalvas.flat()
+      : (receitasPorProduto.get(String(produto._id))?.ingredientes || produto.fichaTecnica || []);
+    return ingredientes.map((ingrediente) => ingrediente.produtoId);
+  });
   const produtos = idsDosIngredientes.length
     ? await Product.find({ _id: { $in: [...idsDosItens, ...idsDosIngredientes] } }).session(session)
     : produtosVenda;
@@ -80,8 +95,12 @@ async function ajustarEstoque(itens, operacao, session) {
     const quantidade = Number(item.quantidade || 0);
     const produto = porId.get(String(item.produtoId));
     if (produto) normalizarEstoqueLegado(produto);
-    const ficha = item.insumosConsumidos?.length ? item.insumosConsumidos : produto?.fichaTecnica;
-    if (produto && (produto.tipoProduto || (produto.aFazer ? 'coz' : 'revenda')) === 'coz' && ficha?.length) {
+    if (operacao === 'baixar' && produto?.tipo === 'venda' && descreverTipoPreparacao(produto).preparacaoPendente) {
+      throw new Error(`O produto "${produto.nome}" tem classificação operacional ambígua. Resolva-a no cadastro antes da venda.`);
+    }
+    const ficha = item.insumosConsumidos?.length ? item.insumosConsumidos : (receitasPorProduto.get(String(produto?._id))?.ingredientes || produto?.fichaTecnica);
+    if (produto && inferirModoOperacional(produto) === 'sob_demanda') {
+      if (!ficha?.length) throw new Error(`Cadastre uma ficha técnica para "${produto.nome}" antes da venda`);
       ficha.forEach((ingrediente) => {
         const ingredienteProduto = porId.get(String(ingrediente.produtoId));
         if (!ingredienteProduto) throw new Error(`Ingrediente não encontrado para ${produto.nome}`);
@@ -169,6 +188,13 @@ router.get('/', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (req
   } catch (err) { res.status(500).json({ msg: err.message }); }
 });
 
+router.get('/cozinha', auth, auth.allowRoles('admin', 'operador', 'cozinha'), async (req, res) => {
+  try {
+    const comandas = await Comanda.find({ status: 'aberta', 'itens.aFazer': true }).sort({ createdAt: 1 });
+    res.json(comandas.map((comanda) => ({ ...comanda.toObject(), itens: comanda.itens.filter((item) => item.aFazer) })));
+  } catch (err) { res.status(500).json({ msg: err.message }); }
+});
+
 router.get('/:id', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (req, res) => {
   try {
     const comanda = await Comanda.findById(req.params.id)
@@ -180,13 +206,6 @@ router.get('/:id', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (
     if (err.name === 'CastError') return res.status(400).json({ msg: 'ID inválido' });
     res.status(500).json({ msg: err.message });
   }
-});
-
-router.get('/cozinha', auth, auth.allowRoles('admin', 'operador', 'cozinha'), async (req, res) => {
-  try {
-    const comandas = await Comanda.find({ status: 'aberta', 'itens.aFazer': true }).sort({ createdAt: 1 });
-    res.json(comandas.map((comanda) => ({ ...comanda.toObject(), itens: comanda.itens.filter((item) => item.aFazer) })));
-  } catch (err) { res.status(500).json({ msg: err.message }); }
 });
 
 router.post('/', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (req, res) => {
@@ -201,6 +220,8 @@ router.post('/', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (re
     const productIds = [...new Set(requestItens.map((item) => item.produtoId))];
     const produtos = await Product.find({ _id: { $in: productIds } }).session(session);
     const porId = new Map(produtos.map((produto) => [String(produto._id), produto]));
+    const receitas = await Recipe.find({ ativa: true, produtoId: { $in: productIds } }).session(session);
+    const receitasPorProduto = new Map(receitas.map((receita) => [String(receita.produtoId), receita]));
     const cartItens = [];
     const itens = [];
     for (const item of requestItens) {
@@ -209,6 +230,10 @@ router.post('/', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (re
       const pesoVendidoKg = vendaPorPeso ? Number(item.pesoVendidoKg) : 0;
       const quantidade = vendaPorPeso ? 1 : Number(item.quantidade);
       if (!product || !Number.isFinite(quantidade) || quantidade < 0.001) throw new Error('Item inválido');
+      if (descreverTipoPreparacao(product).preparacaoPendente) throw new Error(`O produto "${product.nome}" tem classificação operacional ambígua. Resolva-a no cadastro antes da venda.`);
+      const modoOperacional = inferirModoOperacional(product);
+      const ficha = receitasPorProduto.get(String(product._id))?.ingredientes || product.fichaTecnica || [];
+      if (modoOperacional === 'sob_demanda' && !ficha.length) throw new Error(`Cadastre uma ficha técnica para "${product.nome}" antes da venda`);
       if (vendaPorPeso && (!Number.isFinite(pesoVendidoKg) || pesoVendidoKg <= 0)) throw new Error('Informe o peso vendido');
       if (!permiteFracionar(product) && !Number.isInteger(quantidade)) throw new Error(`O produto "${product.nome}" é vendido somente por unidade`);
       const modificadores = Array.isArray(item.modificadores)
@@ -217,7 +242,7 @@ router.post('/', auth, auth.allowRoles('admin', 'operador', 'garcom'), async (re
       const precoNormal = vendaPorPeso ? money(pesoVendidoKg * Number(product.preco || 0)) : precoPorUnidade(product);
       const pricing = vendaPorPeso ? { precoUnitario: precoNormal, precoNormal, economiaUnitario: 0, economiaTotal: 0, faixaAplicada: null } : calcularPrecoComDesconto(product, quantidadesPorProduto.get(String(product._id)), precoNormal);
       cartItens.push({ produto: product, quantidade });
-      itens.push({ produtoId: product.id, codigo: product.codigo, nome: product.nome, precoUnitario: pricing.precoUnitario, precoUnitarioOriginal: pricing.precoNormal, descontoQuantidade: pricing.economiaUnitario, economiaQuantidade: pricing.economiaTotal, faixaDescontoQuantidade: pricing.faixaAplicada?.quantidadeMinima, quantidade, quantidadePecas: vendaPorPeso ? 0 : quantidade, pesoVendidoKg: vendaPorPeso ? pesoVendidoKg : undefined, tipoVenda: vendaPorPeso ? 'peso' : (produtoControlaPeso(product) ? 'inteiro' : 'unidade'), unidadeVenda: product.unidadeVenda, pesoPorUnidade: product.pesoPorUnidade, unidadePeso: product.unidadePeso, modificadores, aFazer: Boolean(product.aFazer), insumosConsumidos: (product.fichaTecnica || []).map((ingrediente) => ({ produtoId: ingrediente.produtoId, quantidade: ingrediente.quantidade, unidade: ingrediente.unidade })) });
+      itens.push({ produtoId: product.id, codigo: product.codigo, nome: product.nome, precoUnitario: pricing.precoUnitario, precoUnitarioOriginal: pricing.precoNormal, descontoQuantidade: pricing.economiaUnitario, economiaQuantidade: pricing.economiaTotal, faixaDescontoQuantidade: pricing.faixaAplicada?.quantidadeMinima, quantidade, quantidadePecas: vendaPorPeso ? 0 : quantidade, pesoVendidoKg: vendaPorPeso ? pesoVendidoKg : undefined, tipoVenda: vendaPorPeso ? 'peso' : (produtoControlaPeso(product) ? 'inteiro' : 'unidade'), unidadeVenda: product.unidadeVenda, pesoPorUnidade: product.pesoPorUnidade, unidadePeso: product.unidadePeso, modificadores, aFazer: modoOperacional === 'sob_demanda', insumosConsumidos: ficha.map((ingrediente) => ({ produtoId: ingrediente.produtoId, quantidade: ingrediente.quantidade, unidade: ingrediente.unidade })) });
     }
     cartItens.forEach((cartItem, idx) => {
       const product = cartItem.produto;
@@ -267,18 +292,23 @@ router.post('/:id/itens', auth, auth.allowRoles('admin', 'operador', 'garcom'), 
     session.startTransaction();
     const comanda = await Comanda.findById(req.params.id).session(session);
     const product = await Product.findById(req.body.produtoId).session(session);
+    const receita = product ? await Recipe.findOne({ ativa: true, produtoId: product._id }).session(session) : null;
     const vendaPorPeso = produtoControlaPeso(product) && req.body.tipoVenda === 'peso';
     const pesoVendidoKg = vendaPorPeso ? Number(req.body.pesoVendidoKg) : 0;
     const quantidade = vendaPorPeso ? 1 : Number(req.body.quantidade);
     if (!comanda || comanda.status !== 'aberta') return res.status(400).json({ msg: 'Comanda não está aberta' });
     if (!product || !Number.isFinite(quantidade) || quantidade < 0.001) return res.status(400).json({ msg: 'Item inválido' });
+    if (descreverTipoPreparacao(product).preparacaoPendente) throw new Error(`O produto "${product.nome}" tem classificação operacional ambígua. Resolva-a no cadastro antes da venda.`);
+    const modoOperacional = inferirModoOperacional(product);
+    const ficha = receita?.ingredientes || product.fichaTecnica || [];
+    if (modoOperacional === 'sob_demanda' && !ficha.length) throw new Error(`Cadastre uma ficha técnica para "${product.nome}" antes da venda`);
     if (vendaPorPeso && (!Number.isFinite(pesoVendidoKg) || pesoVendidoKg <= 0)) return res.status(400).json({ msg: 'Informe o peso vendido' });
     if (!permiteFracionar(product) && !Number.isInteger(quantidade)) return res.status(400).json({ msg: 'Este produto é vendido por unidade' });
     const modificadores = Array.isArray(req.body.modificadores)
       ? req.body.modificadores.filter((item) => typeof item === 'string').slice(0, 10)
       : [];
     await ajustarEstoque([{ produtoId: product.id, quantidade }], 'baixar', session);
-    comanda.itens.push({ produtoId: product.id, codigo: product.codigo, nome: product.nome, precoUnitario: vendaPorPeso ? money(pesoVendidoKg * Number(product.preco || 0)) : precoPorUnidade(product), quantidade, quantidadePecas: vendaPorPeso ? 0 : quantidade, pesoVendidoKg: vendaPorPeso ? pesoVendidoKg : undefined, tipoVenda: vendaPorPeso ? 'peso' : (produtoControlaPeso(product) ? 'inteiro' : 'unidade'), unidadeVenda: product.unidadeVenda, pesoPorUnidade: product.pesoPorUnidade, unidadePeso: product.unidadePeso, modificadores, aFazer: Boolean(product.aFazer), insumosConsumidos: (product.fichaTecnica || []).map((ingrediente) => ({ produtoId: ingrediente.produtoId, quantidade: ingrediente.quantidade, unidade: ingrediente.unidade })) });
+    comanda.itens.push({ produtoId: product.id, codigo: product.codigo, nome: product.nome, precoUnitario: vendaPorPeso ? money(pesoVendidoKg * Number(product.preco || 0)) : precoPorUnidade(product), quantidade, quantidadePecas: vendaPorPeso ? 0 : quantidade, pesoVendidoKg: vendaPorPeso ? pesoVendidoKg : undefined, tipoVenda: vendaPorPeso ? 'peso' : (produtoControlaPeso(product) ? 'inteiro' : 'unidade'), unidadeVenda: product.unidadeVenda, pesoPorUnidade: product.pesoPorUnidade, unidadePeso: product.unidadePeso, modificadores, aFazer: modoOperacional === 'sob_demanda', insumosConsumidos: ficha.map((ingrediente) => ({ produtoId: ingrediente.produtoId, quantidade: ingrediente.quantidade, unidade: ingrediente.unidade })) });
     await recalcularPrecosComanda(comanda, session);
     comanda.valorTotal = money(comanda.itens.reduce((sum, item) => sum + Number(item.precoUnitario || 0) * Number(item.quantidade || 0), 0));
     comanda.saldoDevedor = Math.max(0, comanda.valorTotal - Number(comanda.valorPago || 0));

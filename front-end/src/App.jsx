@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, lazy, Suspense } from 'react-router-dom';
+import { useEffect, lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { ToastProvider } from './components/Toast.jsx';
@@ -37,20 +37,11 @@ import { FormasPagamentoProvider } from './context/FormasPagamentoContext.jsx';
 import { ComandaProvider } from './context/ComandaContext.jsx';
 
 export default function App() {
-  const [swRegistered, setSwRegistered] = useState(false);
-  const [swAvailable, setSwAvailable] = useState(false);
-
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) {
-      setSwRegistered(true);
-      return;
-    }
+    if (!('serviceWorker' in navigator)) return;
 
     navigator.serviceWorker.register('/service-worker.js')
       .then((registration) => {
-        setSwRegistered(true);
-        setSwAvailable(true);
-
         registration.onupdatefound = () => {
           const newWorker = registration.installing;
           newWorker.onstatechange = () => {
@@ -67,7 +58,6 @@ export default function App() {
       })
       .catch((error) => {
         console.error('Service Worker registration failed:', error);
-        setSwRegistered(true);
       });
   }, []);
 
@@ -79,48 +69,51 @@ export default function App() {
             <ToastProvider>
               <Router>
                 <ErrorBoundary fallback={<div>Erro na aplicação. Tente recarregar.</div>}>
-                  <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route element={<PrivateRoute />}>
-                      <Route element={<Layout />}>
-                        <Route path="/pdv" element={<PDV />} />
-                        <Route path="/atendimento/mesas" element={<Comandas />} />
-                        <Route path="/fechamento/:id" element={<TelaFechamento />} />
-                        <Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
-                        <Route path="/cadastro/mesas" element={<MesasCadastro />} />
-                        <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin', 'entregador']} />}>
-                          <Route path "/cozinha" element={<Kitchen />} />
-                          <Route path="/atendimento" element={<Atendimento />} />
+                  <Suspense fallback={<div role="status">Carregando página...</div>}>
+                    <Routes>
+                      <Route path="/login" element={<Login />} />
+                      <Route element={<PrivateRoute />}>
+                        <Route element={<Layout />}>
+                          <Route path="/pdv" element={<PDV />} />
+                          <Route path="/atendimento/mesas" element={<Comandas />} />
+                          <Route path="/fechamento/:id" element={<TelaFechamento />} />
+                          <Route path="/comandas" element={<Navigate to="/atendimento/mesas" replace />} />
+                          <Route path="/cadastro/mesas" element={<MesasCadastro />} />
+                          <Route element={<RoleRoute roles={['atendente', 'gerente', 'admin', 'entregador']} />}>
+                            <Route path="/cozinha" element={<Kitchen />} />
+                            <Route path="/atendimento" element={<Atendimento />} />
+                          </Route>
+                          <Route element={<RoleRoute roles={['admin', 'gerente']} />}>
+                            <Route path="/produtos" element={<Products />} />
+                            <Route path="/clientes" element={<Customers />} />
+                            <Route path="/pedidos" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="/contas-receber" element={<ContasReceber />} />
+                            <Route path="/entregas" element={<Entregas />} />
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/producao" element={<Production />} />
+                            <Route path="/compras" element={<Purchases />} />
+                            <Route path="/financeiro" element={<Financeiro />} />
+                            <Route path="/caixa" element={<Caixa />} />
+                            <Route path="/impressoras" element={<Impressoras />} />
+                          </Route>
+                          <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
+                          <Route element={<RoleRoute roles={['gerente', 'admin']} />}>
+                            <Route path="/delivery-admin" element={<DeliveryAdmin />} />
+                          </Route>
+                          <Route element={<RoleRoute roles={'entregador'} />}>
+                            <Route path="/entregador" element={<EntregadorDashboard />} />
+                          </Route>
+                          <Route path="*" element={<Navigate to="/pdv" />} />
                         </Route>
-                        <Route element={<RoleRoute roles={['admin', 'gerente']} />}>
-                          <Route path="/produtos" element={<Products />} />
-                          <Route path="/clientes" element={<Customers />} />
-                          <Route path="/pedidos" element={<Navigate to="/dashboard" replace />} />
-                          <Route path="/contas-receber" element={<ContasReceber />} />
-                          <Route path="/entregas" element={<Entregas />} />
-                          <Route path="/dashboard" element={<Dashboard />} />
-                          <Route path="/producao" element={<Production />} />
-                          <Route path="/compras" element={<Purchases />} />
-                          <Route path="/financeiro" element={<Financeiro />} />
-                          <Route path="/caixa" element={<Caixa />} />
-                          <Route path="/impressoras" element={<Impressoras />} />
-                        </Route>
-                        <Route path="/producao/fichas" element={<Navigate to="/producao?tab=fichas" replace />} />
-                        <Route element={<RoleRoute roles={['gerente', 'admin']} />}>
-                          <Route path="/delivery-admin" element={<DeliveryAdmin />} />
-                        </Route>
-                        <Route element={<RoleRoute roles={'entregador'} />}>
-                          <Route path="/entregador" element={<EntregadorDashboard />} />
-                        </Route>
-                        <Route path="*" element={<Navigate to="/pdv" />} />
                       </Route>
-                    </Route>
-                    <Route element={<RoleRoute roles={['admin']} />}>
-                      <Route path="/auditoria" element={<Auditoria />} />
-                      <Route path="/usuarios" element={<Users />} />
-                      <Route path="/payment-settings" element={<PaymentSettings />} />
-                      <Route path="/configuracoes" element={<Configuracoes />} />
-                  </Routes>
+                      <Route element={<RoleRoute roles={['admin']} />}>
+                        <Route path="/auditoria" element={<Auditoria />} />
+                        <Route path="/usuarios" element={<Users />} />
+                        <Route path="/payment-settings" element={<PaymentSettings />} />
+                        <Route path="/configuracoes" element={<Configuracoes />} />
+                      </Route>
+                    </Routes>
+                  </Suspense>
                 </ErrorBoundary>
               </Router>
             </ToastProvider>

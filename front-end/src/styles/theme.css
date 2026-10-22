@@ -1029,98 +1029,91 @@ th.num {
 ::-webkit-scrollbar-thumb { background: #d5c8b6; border-radius: var(--radius-pill); }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
 
- @ k e y f r a m e s   s h i m m e r   { 
-     0 %   { 
-         b a c k g r o u n d - p o s i t i o n :   2 0 0 %   5 0 % ; 
-     } 
-     1 0 0 %   { 
-         b a c k g r o u n d - p o s i t i o n :   - 1 0 0 %   5 0 % ; 
-     } 
- } 
- 
- . s k e l e t o n   { 
-     b a c k g r o u n d :   l i n e a r - g r a d i e n t ( 2 6 7 d e g ,   # e 0 e 0 e 0   1 0 % ,   # f 5 f 5 f 5   2 5 % ,   # e 0 e 0 e 0   4 0 % ) ; 
-     b a c k g r o u n d - s i z e :   4 0 0 %   4 0 0 % ; 
-     a n i m a t i o n :   s h i m m e r   2 s   i n f i n i t e   l i n e a r ; 
-     b o r d e r - r a d i u s :   4 p x ; 
- } 
- 
- . s k e l e t o n - g r i d   { 
-     d i s p l a y :   g r i d ; 
-     g r i d - t e m p l a t e - c o l u m n s :   r e p e a t ( a u t o - f i l l ,   m i n m a x ( 1 0 0 p x ,   1 f r ) ) ; 
-     g a p :   8 p x ; 
- }  
- 
- . c o n f i r m - m o d a l   { 
-     p o s i t i o n :   f i x e d ; 
-     t o p :   0 ; 
-     l e f t :   0 ; 
-     w i d t h :   1 0 0 % ; 
-     h e i g h t :   1 0 0 % ; 
-     b a c k g r o u n d :   r g b a ( 0 ,   0 ,   0 ,   0 . 4 ) ; 
-     d i s p l a y :   f l e x ; 
-     a l i g n - i t e m s :   c e n t e r ; 
-     j u s t i f y - c o n t e n t :   c e n t e r ; 
-     z - i n d e x :   9 9 9 9 9 ; 
- } 
- 
- . c o n f i r m - m o d a l - c o n t e n t   { 
-     b a c k g r o u n d :   w h i t e ; 
-     p a d d i n g :   2 4 p x ; 
-     b o r d e r - r a d i u s :   8 p x ; 
-     b o x - s h a d o w :   0   4 p x   2 0 p x   r g b a ( 0 ,   0 ,   0 ,   0 . 2 ) ; 
-     a n i m a t i o n :   p o p I n   0 . 3 s   c u b i c - b e z i e r ( 0 . 1 6 ,   1 ,   0 . 3 ,   1 ) ; 
- } 
- 
- @ k e y f r a m e s   p o p I n   { 
-     f r o m   { 
-         t r a n s f o r m :   s c a l e ( 0 . 8 ) ; 
-         o p a c i t y :   0 ; 
-     } 
-     t o   { 
-         t r a n s f o r m :   s c a l e ( 1 ) ; 
-         o p a c i t y :   1 ; 
-     } 
- }  
- 
- . e m p t y - s t a t e   { 
-     t e x t - a l i g n :   c e n t e r ; 
-     p a d d i n g :   4 8 p x   2 4 p x ; 
-     c o l o r :   # 6 6 6 ; 
- } 
- 
- . e m p t y - s t a t e - i c o n   { 
-     w i d t h :   6 4 p x ; 
-     h e i g h t :   6 4 p x ; 
-     m a r g i n :   0   a u t o   1 6 p x ; 
-     c o l o r :   # 9 9 9 ; 
- } 
- 
- . e m p t y - s t a t e - t i t u l o   { 
-     m a r g i n :    
- 1 6 p x  
- 0  
- 8 p x ; 
-     f o n t - s i z e :   1 . 2 r e m ; 
-     c o l o r :   # 3 3 3 ; 
- } 
- 
- . e m p t y - s t a t e - d e s c r i c a o   { 
-     m a r g i n :   8 p x  
- 0  
- 2 4 p x ; 
-     f o n t - s i z e :   0 . 9 r e m ; 
-     c o l o r :   # 6 6 6 ; 
- } 
- 
- . e m p t y - s t a t e - b o t a o   { 
-     b a c k g r o u n d :   # a 0 5 2 2 d ; 
-     c o l o r :   w h i t e ; 
-     b o r d e r :   n o n e ; 
-     p a d d i n g :   8 p x  
- 1 6 p x ; 
-     b o r d e r R a d i u s :   4 p x ; 
-     f o n t S i z e :   0 . 9 r e m ; 
-     c u r s o r :   p o i n t e r ; 
- }  
- 
+@keyframes shimmer {
+  0% {
+    background-position: 200% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(267deg, #e0e0e0 10%, #f5f5f5 25%, #e0e0e0 40%);
+  background-size: 400% 400%;
+  animation: shimmer 2s infinite linear;
+  border-radius: 4px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
+.confirm-modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: #666;
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  color: #999;
+}
+
+.empty-state-titulo {
+  margin: 16px 0 8px;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.empty-state-descricao {
+  margin: 8px 0 24px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.empty-state-botao {
+  background: #a0522d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  borderRadius: 4px;
+  fontSize: 0.9rem;
+  cursor: pointer;
+}
