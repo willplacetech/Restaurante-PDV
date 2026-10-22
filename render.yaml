@@ -28,4 +28,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://pdv-restaurante-api.onrender.com/api
+        value: https://restaurante-pdv-back.onrender.com/api
