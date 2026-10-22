@@ -119,7 +119,7 @@ router.delete('/entregadores/:id', auth, auth.allowRoles('admin', 'gerente'), as
 });
 
 // GET /api/delivery/pedidos - Listar pedidos de entrega
-router.get('/pedidos', auth, async (req, res) => {
+router.get('/pedidos', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
     const { status, entregadorId } = req.query;
     let query = {};
@@ -133,7 +133,7 @@ router.get('/pedidos', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos - Criar pedido de entrega
-router.post('/pedidos', auth, async (req, res) => {
+router.post('/pedidos', auth, auth.allowRoles('admin', 'gerente', 'operador'), async (req, res) => {
   try {
     const { origem, itens, valorTotal, taxaEntrega } = req.body;
     if (!Array.isArray(itens) || !itens.length) {
@@ -163,7 +163,7 @@ router.post('/pedidos', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos/:id/despachar - Despachar pedido
-router.post('/pedidos/:id/despachar', auth, async (req, res) => {
+router.post('/pedidos/:id/despachar', auth, auth.allowRoles('admin', 'gerente'), async (req, res) => {
   try {
     const { entregadorId } = req.body;
     const pedido = await DeliveryOrder.findByIdAndUpdate(
@@ -196,7 +196,7 @@ router.post('/pedidos/:id/despachar', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos/:id/pronto - Marcar pedido como pronto
-router.post('/pedidos/:id/pronto', auth, async (req, res) => {
+router.post('/pedidos/:id/pronto', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
     const pedido = await DeliveryOrder.findByIdAndUpdate(
       req.params.id,
@@ -227,7 +227,7 @@ router.post('/pedidos/:id/pronto', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos/:id/cancelar - Cancelar pedido
-router.post('/pedidos/:id/cancelar', auth, async (req, res) => {
+router.post('/pedidos/:id/cancelar', auth, auth.allowRoles('admin', 'gerente', 'operador', 'entregador'), async (req, res) => {
   try {
     const { motivo } = req.body;
     const pedido = await DeliveryOrder.findByIdAndUpdate(
@@ -259,7 +259,7 @@ router.post('/pedidos/:id/cancelar', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos/:id/status - Atualizar status do pedido
-router.post('/pedidos/:id/status', auth, async (req, res) => {
+router.post('/pedidos/:id/status', auth, auth.allowRoles('admin', 'gerente', 'entregador'), async (req, res) => {
   try {
     const { novoStatus } = req.body;
     const pedidoAntigo = await DeliveryOrder.findById(req.params.id);
@@ -288,7 +288,7 @@ router.post('/pedidos/:id/status', auth, async (req, res) => {
 });
 
 // POST /api/delivery/pedidos/:id/enviar-whatsapp - Enviar WhatsApp
-router.post('/pedidos/:id/enviar-whatsapp', auth, async (req, res) => {
+router.post('/pedidos/:id/enviar-whatsapp', auth, auth.allowRoles('admin', 'gerente', 'operador', 'entregador'), async (req, res) => {
   try {
     const pedido = await DeliveryOrder.findById(req.params.id).populate('entregadorId', 'nome');
     if (!pedido) return res.status(404).json({ msg: 'Pedido não encontrado' });

@@ -7,7 +7,7 @@ const Order = require('../models/Order');
 
 router.use(auth, auth.allowRoles('admin'));
 
-router.get('/csv', auth, auth.allowRoles('admin'), async (req, res) => {
+router.get('/csv', async (req, res) => {
   try {
     const [comandasAbertas, pedidos] = await Promise.all([
       Comanda.find({
